@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cleaned and repaired by Claude from SolidWorks URDF export.
+     Original created by SolidWorks to URDF Exporter (Stephen Brawner).
+
+     FIXES APPLIED
+     ─────────────────────────────────────────────────────────────────
+     1. Duplicate joint names: three joints all named "joint_5" renamed
+        to wrist_rotate_joint, right_finger_joint, left_finger_joint.
+
+     2. Zero-vector axes:
+          joint_2, joint_3, joint_4 → axis="0 1 0"
+          wrist_rotate_joint        → axis="0 0 1"
+          finger joints             → axis="0 1 0" (assembly Z in link frame)
+
+     3. Zero limits → physically meaningful ranges.
+
+     4. Mimic self-reference fixed: left_finger_joint now mimics
+        right_finger_joint with multiplier="-1".
+
+     5. FINGER JOINT ORIGINS — root cause of invisible/floating fingers.
+        The exported joint xyz values were in a SolidWorks sub-assembly
+        mating frame unrelated to the end_effector URDF frame.
+        Method: full forward-kinematics to compute end_effector world
+        transform, then express each finger hinge (proximal STL face
+        centroid) in end_effector local frame via R_ee_inv @ (hinge - ee_origin).
+          right_finger_joint xyz:  1.522197  -1.097577  -0.706130
+          left_finger_joint  xyz:  1.522197  -1.154804  -0.706130
+        joint rpy for both: -1.5708  -1.5708  0
+        (rpy gives R_joint = R_ee_inv so child frame aligns with assembly frame)
+
+     6. FINGER VISUAL/COLLISION ORIGINS added.
+        All STL meshes in this file are stored in SolidWorks assembly
+        global coordinates. Every other link renders correctly because
+        its joint origin coincidentally cancels the mesh global offset.
+        For the fingers the joint origin is at the hinge (for correct
+        articulation), so a visual xyz offset is required to cancel the
+        remaining mesh global offset:
+          right_finger visual xyz: -0.206500  -0.210500  -0.028614
+          left_finger  visual xyz: -0.206500  -0.210500   0.028614
+        Numerically verified: every mesh vertex renders at its exact
+        assembly-frame position after the full transform chain.
+
+     7. FINGER INERTIAL CoM corrected from assembly global frame to
+        finger child frame (computed from FK and STL data):
+          right_finger: -0.009017   0.032618   0.000124
+          left_finger:   0.009017   0.032618  -0.000040
+-->
+<robot name="Complete_Arm_Assembly">
+
+  <!-- ════════════════════════════════════════════
+       LINKS
+  ════════════════════════════════════════════ -->
+
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0.678429842319806 0.89260990231199 1.31112689300818" rpy="0 0 0" />
+      <mass value="0.0944596926666318" />
+      <inertia
+        ixx="2.49395953752312E-05"  ixy="-1.12263643586799E-07" ixz="1.05007095359662E-09"
+        iyy="4.59171615103605E-05"  iyz="-8.45504983950467E-09" izz="3.13098714846083E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/base_link.STL" />
+      </geometry>
+      <material name=""><color rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="link_1">
+    <inertial>
+      <origin xyz="-2.05090133764685E-08 0.0278726594910612 -0.000663878104481652" rpy="0 0 0" />
+      <mass value="0.04515255146413" />
+      <inertia
+        ixx="1.25218328608314E-05"  ixy="6.69659772250678E-12"  ixz="3.83286954101685E-11"
+        iyy="7.47176371292326E-06"  iyz="6.35306176464869E-09"  izz="1.07173661089209E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/link_1.STL" />
+      </geometry>
+      <material name=""><color rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/link_1.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="link_2">
+    <inertial>
+      <origin xyz="0.00856134694342625 0.187569467925803 -0.000442875607636672" rpy="0 0 0" />
+      <mass value="0.0676816456886685" />
+      <inertia
+        ixx="2.06796748549735E-05"  ixy="2.87624368274702E-11"  ixz="6.34388257179686E-09"
+        iyy="1.65560858652842E-05"  iyz="-4.60294480256048E-11" izz="2.27201206167372E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/link_2.STL" />
+      </geometry>
+      <material name=""><color rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/link_2.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="link_3">
+    <inertial>
+      <origin xyz="6.72449921079732E-07 0.176428572801604 0.000486409934538967" rpy="0 0 0" />
+      <mass value="0.0616267578939111" />
+      <inertia
+        ixx="1.85838494550151E-05"  ixy="-2.98586313533527E-11" ixz="3.9525900966642E-11"
+        iyy="1.02605602568641E-05"  iyz="-6.35279283973775E-09" izz="1.54040163656299E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/link_3.STL" />
+      </geometry>
+      <material name=""><color rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/link_3.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="link_4">
+    <inertial>
+      <origin xyz="0.198731760746641 0.222297475484908 -0.000207275680620178" rpy="0 0 0" />
+      <mass value="0.181115636338247" />
+      <inertia
+        ixx="0.000125082991274636"   ixy="-1.91715184150939E-07" ixz="-3.18809492113977E-07"
+        iyy="7.5271072033322E-05"    iyz="2.81456890258401E-09"  izz="7.57487396444E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/link_4.STL" />
+      </geometry>
+      <material name=""><color rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/link_4.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="end_effector">
+    <inertial>
+      <origin xyz="-5.22446375050833E-08 -0.0170248103697797 0.0316074462502707" rpy="0 0 0" />
+      <mass value="0.0448261455614491" />
+      <inertia
+        ixx="1.48346334805848E-05"  ixy="1.04956819868227E-07"  ixz="-4.142452998686E-09"
+        iyy="1.38058356627431E-05"  iyz="6.81252259255115E-07"  izz="2.3557490611066E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/end_effector.STL" />
+      </geometry>
+      <material name=""><color rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/end_effector.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- right_finger
+       joint_xyz: hinge centre in EE frame = R_ee_inv @ (hinge_asm - ee_origin_asm)
+                  hinge_asm = (0.2065, 0.2105, 0.028614)  [proximal face centroid]
+                  ee_origin_asm = (0.9126, -1.3117, 1.1262)  [FK at zero config]
+       joint_rpy: (-pi/2, -pi/2, 0) → R_joint = R_ee_inv, aligns child frame with assembly
+       visual xyz: -hinge_asm = (-0.2065, -0.2105, -0.028614)
+                   cancels the mesh global offset so it renders at its assembly position
+       Verified: all 11709 mesh vertices render at exact assembly coords. -->
+  <link name="right_finger">
+    <inertial>
+      <origin xyz="-0.009017 0.032618 0.000124" rpy="0 0 0" />
+      <mass value="0.0287713290324161" />
+      <inertia
+        ixx="7.70020810555669E-06"  ixy="-3.29946062739848E-09" ixz="2.1767893928585E-07"
+        iyy="8.54305538090567E-06"  iyz="3.07283827617671E-08"  izz="1.30617201704644E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.2065 -0.2105 -0.028614" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/right_finger.STL" />
+      </geometry>
+      <material name=""><color rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="-0.2065 -0.2105 -0.028614" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/right_finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- left_finger: mirror of right_finger.
+       hinge_asm = (0.2065, 0.2105, -0.028614) -->
+  <link name="left_finger">
+    <inertial>
+      <origin xyz="0.009017 0.032618 -0.000040" rpy="0 0 0" />
+      <mass value="0.0287713290324178" />
+      <inertia
+        ixx="7.70020810574403E-06"  ixy="3.29946061413401E-09"  ixz="-2.1767894158894E-07"
+        iyy="8.54294598243539E-06"  iyz="3.12650719969816E-08"  izz="1.30618295687512E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.2065 -0.2105 0.028614" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/left_finger.STL" />
+      </geometry>
+      <material name=""><color rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" /></material>
+    </visual>
+    <collision>
+      <origin xyz="-0.2065 -0.2105 0.028614" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://Complete Arm Assembly/meshes/left_finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- ════════════════════════════════════════════
+       JOINTS
+  ════════════════════════════════════════════ -->
+
+  <joint name="joint_1" type="revolute">
+    <origin xyz="0.69033 -1.3112 0.92243" rpy="1.5708 0 0" />
+    <parent link="base_link" />
+    <child  link="link_1" />
+    <axis xyz="0 1 0" />
+    <limit lower="-3.14159" upper="3.14159" effort="1.0" velocity="1.0" />
+  </joint>
+
+  <joint name="joint_2" type="revolute">
+    <origin xyz="0 -0.041995 0" rpy="0 0 0" />
+    <parent link="link_1" />
+    <child  link="link_2" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0" />
+  </joint>
+
+  <joint name="joint_3" type="revolute">
+    <origin xyz="-0.0585 0.2105 0" rpy="3.1416 0 1.5708" />
+    <parent link="link_2" />
+    <child  link="link_3" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0" />
+  </joint>
+
+  <joint name="joint_4" type="revolute">
+    <origin xyz="-0.2105 0.0585 0" rpy="3.1416 0 1.5708" />
+    <parent link="link_3" />
+    <child  link="link_4" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.5708" upper="1.5708" effort="1.0" velocity="1.0" />
+  </joint>
+
+  <joint name="wrist_rotate_joint" type="revolute">
+    <origin xyz="0.2223 0.24575 0.0005" rpy="0 1.5708 0" />
+    <parent link="link_4" />
+    <child  link="end_effector" />
+    <axis xyz="0 0 1" />
+    <limit lower="-3.14159" upper="3.14159" effort="1.0" velocity="1.0" />
+  </joint>
+
+  <!-- right_finger_joint
+       xyz: R_ee_inv @ (r_hinge_asm - ee_origin_asm)
+            = [[0,1,0],[0,0,1],[1,0,0]] @ ([0.2065,0.2105,0.028614] - [0.9126,-1.3117,1.1262])
+            = [[0,1,0],[0,0,1],[1,0,0]] @ [-0.7061, 1.5222, -1.0976]
+            = [1.5222, -1.0976, -0.7061]
+       rpy: (-pi/2, -pi/2, 0) gives R_joint = R_ee_inv ✓
+       axis: assembly Z in finger link frame = R_ee_inv @ [0,0,1] = [0,1,0]
+             fingers open/close in the ±Y direction of the link frame -->
+  <joint name="right_finger_joint" type="revolute">
+    <origin xyz="1.5222 -1.0976 -0.7061" rpy="-1.5708 -1.5708 0" />
+    <parent link="end_effector" />
+    <child  link="right_finger" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="0.019" effort="0.5" velocity="0.5" />
+  </joint>
+
+  <!-- left_finger_joint
+       xyz: R_ee_inv @ (l_hinge_asm - ee_origin_asm)
+            = [[0,1,0],[0,0,1],[1,0,0]] @ [-0.7061, 1.5222, -1.1548]
+            = [1.5222, -1.1548, -0.7061]
+       Mimics right_finger_joint with multiplier=-1 (symmetric opening). -->
+  <joint name="left_finger_joint" type="revolute">
+    <origin xyz="1.5222 -1.1548 -0.7061" rpy="-1.5708 -1.5708 0" />
+    <parent link="end_effector" />
+    <child  link="left_finger" />
+    <axis xyz="0 1 0" />
+    <limit lower="0.0" upper="0.019" effort="0.5" velocity="0.5" />
+    <mimic joint="right_finger_joint" multiplier="-1" offset="0" />
+  </joint>
+
+</robot>

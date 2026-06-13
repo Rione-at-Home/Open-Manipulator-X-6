@@ -3,7 +3,22 @@
      Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
      For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
 <robot
-  name="Complete Arm Assembly">
+  name="Complete Arm Assembly"
+  xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ===== Finger joint position properties ===== -->
+  <!-- z offset relative to end_effector frame: world_finger_z - ee_world_z = 0 -->
+  <xacro:property name="ee_world_z"     value="0.0005"/>  <!-- from joint_5 z -->
+  <xacro:property name="world_finger_z" value="0.0005"/>  <!-- fingers sit at same z as end_effector -->
+  <xacro:property name="finger_local_z" value="${world_finger_z - ee_world_z}"/>
+
+  <!-- Right finger x/y offsets (unchanged) -->
+  <xacro:property name="rf_x" value="1.2858"/>
+  <xacro:property name="rf_y" value="-1.1091"/>
+
+  <!-- Left finger x/y offsets (unchanged) -->
+  <xacro:property name="lf_x" value="1.3371"/>
+  <xacro:property name="lf_y" value="-1.1093"/>
   <link
     name="base_link">
     <inertial>
@@ -378,7 +393,7 @@
     name="right_finger_joint"
     type="prismatic">
     <origin
-      xyz="1.2858 -1.1091 -0.83518"
+      xyz="${rf_x} ${rf_y} ${finger_local_z}"
       rpy="3.1416 -1.5708 0" />
     <parent
       link="end_effector" />
@@ -436,7 +451,7 @@
     name="left_finger_joint"
     type="prismatic">
     <origin
-      xyz="1.3371 -1.1093 -0.83538"
+      xyz="${lf_x} ${lf_y} ${finger_local_z}"
       rpy="3.1416 -1.5708 0" />
     <parent
       link="end_effector" />

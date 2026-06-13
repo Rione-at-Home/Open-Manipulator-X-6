@@ -3,37 +3,22 @@
      Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
      For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
 <robot
-  name="Complete Arm Assembly"
-  xmlns:xacro="http://www.ros.org/wiki/xacro">
-
-  <!-- ===== Finger joint position properties ===== -->
-  <!-- z offset relative to end_effector frame: world_finger_z - ee_world_z = 0 -->
-  <xacro:property name="ee_world_z"     value="0.0005"/>  <!-- from joint_5 z -->
-  <xacro:property name="world_finger_z" value="0.0005"/>  <!-- fingers sit at same z as end_effector -->
-  <xacro:property name="finger_local_z" value="${world_finger_z - ee_world_z}"/>
-
-  <!-- Right finger x/y offsets (unchanged) -->
-  <xacro:property name="rf_x" value="1.2858"/>
-  <xacro:property name="rf_y" value="-1.1091"/>
-
-  <!-- Left finger x/y offsets (unchanged) -->
-  <xacro:property name="lf_x" value="1.3371"/>
-  <xacro:property name="lf_y" value="-1.1093"/>
+  name="complete_arm_assembly">
   <link
     name="base_link">
     <inertial>
       <origin
-        xyz="0.0122317361715243 0.000234343346485964 0.027977615168535"
+        xyz="-0.0126522064234279 0.0112081741589456 1.03738375057827"
         rpy="0 0 0" />
       <mass
-        value="0.0426185203491502" />
+        value="0.0944596926666338" />
       <inertia
-        ixx="6.76355398275022E-06"
-        ixy="-4.08417702652901E-12"
-        ixz="-1.08324747788106E-07"
-        iyy="1.186471207475E-05"
-        iyz="-1.16335668381936E-11"
-        izz="1.04659692792085E-05" />
+        ixx="2.49395953752317E-05"
+        ixy="-1.07943571271723E-07"
+        ixz="1.09620010475091E-09"
+        iyy="4.59171379732495E-05"
+        iyz="8.47831697329348E-09"
+        izz="3.13098479474975E-05" />
     </inertial>
     <visual>
       <origin
@@ -41,47 +26,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/base_link.STL" />
-      </geometry>
-      <material
-        name="">
-        <color
-          rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" />
-      </material>
-    </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://Complete Arm Assembly/meshes/base_link.STL" />
-      </geometry>
-    </collision>
-  </link>
-  <link
-    name="link_1">
-    <inertial>
-      <origin
-        xyz="-0.666380217100272 -0.84855895940617 -1.31214318818171"
-        rpy="0 0 0" />
-      <mass
-        value="0.0451525514641292" />
-      <inertia
-        ixx="1.25218328608314E-05"
-        ixy="6.69659767784837E-12"
-        ixz="3.83286954310679E-11"
-        iyy="7.47176371292313E-06"
-        iyz="6.35306176471457E-09"
-        izz="1.07173661089209E-05" />
-    </inertial>
-    <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://Complete Arm Assembly/meshes/link_1.STL" />
+          filename="package://complete_arm_assembly/meshes/base_link.STL" />
       </geometry>
       <material
         name="">
@@ -95,7 +40,47 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/link_1.STL" />
+          filename="package://complete_arm_assembly/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="link_1">
+    <inertial>
+      <origin
+        xyz="-1.21952357101662E-08 0.0275827025842473 0.000932155095934251"
+        rpy="0 0 0" />
+      <mass
+        value="0.0446962058831376" />
+      <inertia
+        ixx="1.2281031278665E-05"
+        ixy="1.20613706142599E-12"
+        ixz="7.89362412621311E-12"
+        iyy="7.29718852707007E-06"
+        iyz="-1.08328965106875E-07"
+        izz="1.06262085935607E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://complete_arm_assembly/meshes/link_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://complete_arm_assembly/meshes/link_1.STL" />
       </geometry>
     </collision>
   </link>
@@ -103,8 +88,8 @@
     name="joint_1"
     type="revolute">
     <origin
-      xyz="0.69033 -1.3112 0.92243"
-      rpy="1.5708 0 0" />
+      xyz="-0.00078087 -1.0373 0.041025"
+      rpy="1.5708 0 0.52968" />
     <parent
       link="base_link" />
     <child
@@ -121,17 +106,17 @@
     name="link_2">
     <inertial>
       <origin
-        xyz="-0.657818849647841 -0.688862150971421 -1.31192218568486"
+        xyz="0.00834949781275746 0.104913900374987 0.000619823079234583"
         rpy="0 0 0" />
       <mass
-        value="0.067681645688669" />
+        value="0.0672255298525689" />
       <inertia
-        ixx="2.06796748549735E-05"
-        ixy="2.87624368311378E-11"
-        ixz="6.34388257183037E-09"
-        iyy="1.65560858652843E-05"
-        iyz="-4.60294479835768E-11"
-        izz="2.27201206167373E-05" />
+        ixx="2.05050978794384E-05"
+        ixy="6.64298051454639E-11"
+        ixz="-1.08314547769564E-07"
+        iyy="1.63154142770848E-05"
+        iyz="-3.36235925763034E-11"
+        izz="2.26290225979944E-05" />
     </inertial>
     <visual>
       <origin
@@ -139,7 +124,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/link_2.STL" />
+          filename="package://complete_arm_assembly/meshes/link_2.STL" />
       </geometry>
       <material
         name="">
@@ -153,7 +138,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/link_2.STL" />
+          filename="package://complete_arm_assembly/meshes/link_2.STL" />
       </geometry>
     </collision>
   </link>
@@ -161,8 +146,8 @@
     name="joint_2"
     type="revolute">
     <origin
-      xyz="0 -0.041995 0"
-      rpy="0 0 0" />
+      xyz="0 0.040505 0"
+      rpy="0 0 0.31732" />
     <parent
       link="link_1" />
     <child
@@ -179,17 +164,17 @@
     name="link_3">
     <inertial>
       <origin
-        xyz="-0.876430946447304 -0.489951623789659 1.31196572001177"
+        xyz="0.0935866050880213 6.67293575173922E-07 0.00068111158867068"
         rpy="0 0 0" />
       <mass
-        value="0.0616267578939116" />
+        value="0.0611704168846414" />
       <inertia
-        ixx="1.85838494550151E-05"
-        ixy="-2.98586314510945E-11"
-        ixz="3.95259008782377E-11"
-        iyy="1.02605602568643E-05"
-        iyz="-6.3527928399711E-09"
-        izz="1.54040163656297E-05" />
+        ixx="1.00859845876895E-05"
+        ixy="-2.17559601024057E-11"
+        ixz="-1.08328506713134E-07"
+        iyy="1.83430472565671E-05"
+        iyz="-9.01129243746046E-12"
+        izz="1.53128567578939E-05" />
     </inertial>
     <visual>
       <origin
@@ -197,7 +182,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/link_3.STL" />
+          filename="package://complete_arm_assembly/meshes/link_3.STL" />
       </geometry>
       <material
         name="">
@@ -211,7 +196,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/link_3.STL" />
+          filename="package://complete_arm_assembly/meshes/link_3.STL" />
       </geometry>
     </collision>
   </link>
@@ -219,8 +204,8 @@
     name="joint_3"
     type="revolute">
     <origin
-      xyz="-0.0585 0.2105 0"
-      rpy="3.1416 0 1.5708" />
+      xyz="0.024 0.128 0"
+      rpy="0 0 0.95298" />
     <parent
       link="link_2" />
     <child
@@ -237,17 +222,17 @@
     name="link_4">
     <inertial>
       <origin
-        xyz="-0.467648435844624 -0.65413414341234 -1.31168658575783"
+        xyz="0.0507317607444873 0.0117974755114853 -0.000207275711896826"
         rpy="0 0 0" />
       <mass
-        value="0.181115636338247" />
+        value="0.181115636310511" />
       <inertia
-        ixx="0.000125082991280758"
-        ixy="-1.91715182419283E-07"
-        ixz="-3.18809492114017E-07"
-        iyy="7.52710720340047E-05"
-        iyz="2.81456890255508E-09"
-        izz="7.57487396509343E-05" />
+        ixx="0.000125082991168769"
+        ixy="-1.91715154402022E-07"
+        ixz="-3.18809488045174E-07"
+        iyy="7.52710719324352E-05"
+        iyz="2.81457808221661E-09"
+        izz="7.57487396080242E-05" />
     </inertial>
     <visual>
       <origin
@@ -255,7 +240,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/link_4.STL" />
+          filename="package://complete_arm_assembly/meshes/link_4.STL" />
       </geometry>
       <material
         name="">
@@ -269,7 +254,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/link_4.STL" />
+          filename="package://complete_arm_assembly/meshes/link_4.STL" />
       </geometry>
     </collision>
   </link>
@@ -277,8 +262,8 @@
     name="joint_4"
     type="revolute">
     <origin
-      xyz="-0.2105 0.0585 0"
-      rpy="3.1416 0 1.5708" />
+      xyz="0.124 0 0"
+      rpy="0 0 -1.2703" />
     <parent
       link="link_3" />
     <child
@@ -292,20 +277,20 @@
       velocity="0" />
   </joint>
   <link
-    name="end_effector">
+    name="link_5">
     <inertial>
       <origin
-        xyz="1.31147925783259 -0.893456429266982 -0.634772750341023"
+        xyz="0.0157360853404248 -0.00262699017847434 1.65823443865065E-08"
         rpy="0 0 0" />
       <mass
-        value="0.0448261455614486" />
+        value="0.0850149357001051" />
       <inertia
-        ixx="1.48346334805845E-05"
-        ixy="1.04956819868274E-07"
-        ixz="-4.14245299868945E-09"
-        iyy="1.38058356627429E-05"
-        iyz="6.8125225925506E-07"
-        izz="2.35574906110657E-05" />
+        ixx="3.37373512903583E-05"
+        ixy="7.89582770327132E-07"
+        ixz="4.15474871504368E-09"
+        iyy="2.03515715548354E-05"
+        iyz="-6.78213892525158E-08"
+        izz="2.66043489763699E-05" />
     </inertial>
     <visual>
       <origin
@@ -313,7 +298,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/end_effector.STL" />
+          filename="package://complete_arm_assembly/meshes/link_5.STL" />
       </geometry>
       <material
         name="">
@@ -327,7 +312,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/end_effector.STL" />
+          filename="package://complete_arm_assembly/meshes/link_5.STL" />
       </geometry>
     </collision>
   </link>
@@ -335,70 +320,12 @@
     name="joint_5"
     type="revolute">
     <origin
-      xyz="0.2223 0.24575 0.0005"
-      rpy="0 1.5708 0" />
+      xyz="0.086402 0.02425 0.0005"
+      rpy="0.73588 0 0" />
     <parent
       link="link_4" />
     <child
-      link="end_effector" />
-    <axis
-      xyz="1 0 0" />
-    <limit
-      lower="0"
-      upper="0"
-      effort="0"
-      velocity="0" />
-  </joint>
-  <link
-    name="right_finger">
-    <inertial>
-      <origin
-        xyz="0.239118086547263 0.21062408027815 0.0195971430491008"
-        rpy="0 0 0" />
-      <mass
-        value="0.0287713290324179" />
-      <inertia
-        ixx="7.70020810555727E-06"
-        ixy="-3.2994606274732E-09"
-        ixz="2.17678939286046E-07"
-        iyy="8.54305538090716E-06"
-        iyz="3.07283827617155E-08"
-        izz="1.30617201704657E-05" />
-    </inertial>
-    <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://Complete Arm Assembly/meshes/right_finger.STL" />
-      </geometry>
-      <material
-        name="">
-        <color
-          rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" />
-      </material>
-    </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://Complete Arm Assembly/meshes/right_finger.STL" />
-      </geometry>
-    </collision>
-  </link>
-  <joint
-    name="right_finger_joint"
-    type="prismatic">
-    <origin
-      xyz="${rf_x} ${rf_y} ${finger_local_z}"
-      rpy="3.1416 -1.5708 0" />
-    <parent
-      link="end_effector" />
-    <child
-      link="right_finger" />
+      link="link_5" />
     <axis
       xyz="1 0 0" />
     <limit
@@ -411,17 +338,17 @@
     name="left_finger">
     <inertial>
       <origin
-        xyz="0.23911808655568 0.210459665073558 -0.0195969777282517"
+        xyz="0.0781188934725541 1.6174765238105 1.73979296186067"
         rpy="0 0 0" />
       <mass
-        value="0.028771329032418" />
+        value="0.0274218702393672" />
       <inertia
-        ixx="7.70020810574429E-06"
-        ixy="3.29946061416615E-09"
-        ixz="-2.17678941588927E-07"
-        iyy="8.54294598243523E-06"
-        iyz="3.12650719972031E-08"
-        izz="1.3061829568751E-05" />
+        ixx="7.35774020308452E-06"
+        ixy="3.29864913425187E-09"
+        ixz="-2.17677539898612E-07"
+        iyy="8.21754721276065E-06"
+        iyz="-1.71945655944004E-10"
+        izz="1.30421684504181E-05" />
     </inertial>
     <visual>
       <origin
@@ -429,12 +356,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/left_finger.STL" />
+          filename="package://complete_arm_assembly/meshes/left_finger.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.250980392156863 0.250980392156863 0.250980392156863 1" />
+          rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" />
       </material>
     </visual>
     <collision>
@@ -443,7 +370,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://Complete Arm Assembly/meshes/left_finger.STL" />
+          filename="package://complete_arm_assembly/meshes/left_finger.STL" />
       </geometry>
     </collision>
   </link>
@@ -451,10 +378,10 @@
     name="left_finger_joint"
     type="prismatic">
     <origin
-      xyz="${lf_x} ${lf_y} ${finger_local_z}"
-      rpy="3.1416 -1.5708 0" />
+      xyz="-0.019263 -1.6285 -1.7856"
+      rpy="0 0 0" />
     <parent
-      link="end_effector" />
+      link="link_5" />
     <child
       link="left_finger" />
     <axis
@@ -464,8 +391,66 @@
       upper="0"
       effort="0"
       velocity="0" />
+  </joint>
+  <link
+    name="right_finger">
+    <inertial>
+      <origin
+        xyz="0.0781189009130919 1.61747652084744 1.73979295754266"
+        rpy="0 0 0" />
+      <mass
+        value="0.0274218628103051" />
+      <inertia
+        ixx="7.3577374565536E-06"
+        ixy="3.2993037045971E-09"
+        ixz="-2.17678420451016E-07"
+        iyy="8.21755014234899E-06"
+        iyz="-1.71039214492556E-10"
+        izz="1.30421672826558E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://complete_arm_assembly/meshes/right_finger.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.894117647058823 0.894117647058823 0.894117647058823 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://complete_arm_assembly/meshes/right_finger.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="right_finger_joint"
+    type="prismatic">
+    <origin
+      xyz="-0.019263 1.6058 1.7856"
+      rpy="-3.1416 0 0" />
+    <parent
+      link="link_5" />
+    <child
+      link="right_finger" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="0"
+      upper="0"
+      effort="0"
+      velocity="0" />
     <mimic
-      joint="right_finger_joint"
+      joint="left_finger_joint"
       multiplier="-1"
       offset="0" />
   </joint>

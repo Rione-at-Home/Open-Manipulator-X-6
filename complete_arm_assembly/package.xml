@@ -1,10 +1,10 @@
 <package format="2">
-  <name>Complete Arm Assembly</name>
+  <name>complete_arm_assembly</name>
   <version>1.0.0</version>
   <description>
-    <p>URDF Description package for Complete Arm Assembly</p>
+    <p>URDF Description package for complete_arm_assembly</p>
     <p>This package contains configuration data, 3D models and launch files
-for Complete Arm Assembly robot</p>
+for complete_arm_assembly robot</p>
   </description>
   <author>TODO</author>
   <maintainer email="TODO@email.com" />

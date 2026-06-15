@@ -143,7 +143,7 @@
     <parent link="link_3"/>
     <child link="link_4"/>
     <axis xyz="0 0 1"/>
-    <limit effort="10" lower="-1" upper="2.6" velocity="1"/>
+    <limit effort="10" lower="-1" upper="2." velocity="1"/>
   </joint>
   <link name="link_5">
     <inertial>
@@ -232,5 +232,11 @@
     <axis xyz="0 0 -1"/>
     <limit effort="0" lower="0" upper="0" velocity="0"/>
     <mimic joint="left_finger_joint" multiplier="-1" offset="0"/>
+  </joint>
+  <link name="world"/>
+  <joint name="world_to_base_joint" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
   </joint>
 </robot>

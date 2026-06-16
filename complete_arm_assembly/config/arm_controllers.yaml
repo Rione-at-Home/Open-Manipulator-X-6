@@ -17,8 +17,8 @@ gazebo_ros2_control:
         joint_3:            {kp: 80.0,  kd: 4.0,  ki: 0.3,  max_integral_error: 1.0}
         joint_4:            {kp: 60.0,  kd: 3.0,  ki: 0.3,  max_integral_error: 1.0}
         joint_5:            {kp: 40.0,  kd: 2.0,  ki: 0.1,  max_integral_error: 0.5}
-        left_finger_joint:  {kp: 20.0,  kd: 10.0, ki: 0.1,  max_integral_error: 0.05}
-        right_finger_joint: {kp: 20.0,  kd: 10.0, ki: 0.1,  max_integral_error: 0.05}
+        left_finger_joint:  {kp: 200.0,  kd: 20.0, ki: 0.1,  max_integral_error: 0.05}
+        right_finger_joint: {kp: 200.0,  kd: 20.0, ki: 0.1,  max_integral_error: 0.05}
 
 arm_controller:
   ros__parameters:

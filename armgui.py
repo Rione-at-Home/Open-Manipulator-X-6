@@ -6,7 +6,6 @@
 #
 #
 
-#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -54,7 +53,6 @@ def main():
     spin_thread = threading.Thread(target=ros_spin, args=(node,), daemon=True)
     spin_thread.start()
 
-    # Joint limits
     joint_limits = [
         ('joint_1', -3.14, 3.14),
         ('joint_2', -1.57, 1.57),
@@ -76,11 +74,9 @@ def main():
 
     sliders = {}
 
-    # Title
     tk.Label(root, text='Robot Arm Controller', font=('Helvetica', 16, 'bold'),
              bg='#2b2b2b', fg='white').pack(pady=10)
 
-    # Arm sliders
     tk.Label(root, text='── Arm Joints ──', font=('Helvetica', 11),
              bg='#2b2b2b', fg='#aaaaaa').pack()
 
@@ -119,18 +115,18 @@ def main():
               bg='#555555', fg='white', font=('Helvetica', 10),
               relief='flat', padx=10, pady=4).pack(pady=2)
 
-    # Gripper
     tk.Label(root, text='── Gripper ──', font=('Helvetica', 11),
              bg='#2b2b2b', fg='#aaaaaa').pack(pady=(12, 0))
 
     gripper_frame = ttk.Frame(root)
     gripper_frame.pack(pady=5)
 
+    # Open = [0.0, 0.0], Close = [0.019, -0.019]
     def open_gripper():
-        threading.Thread(target=node.send_gripper, args=(0.019, -0.019), daemon=True).start()
+        threading.Thread(target=node.send_gripper, args=(0.0, 0.0), daemon=True).start()
 
     def close_gripper():
-        threading.Thread(target=node.send_gripper, args=(0.0, 0.0), daemon=True).start()
+        threading.Thread(target=node.send_gripper, args=(0.019, -0.019), daemon=True).start()
 
     btn_frame = ttk.Frame(gripper_frame)
     btn_frame.pack()

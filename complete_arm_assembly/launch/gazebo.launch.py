@@ -41,6 +41,19 @@ def generate_launch_description():
         output='screen',
     )
 
+    spawn_bag = Node(
+        package='gazebo_ros',
+        executable='spawn_entity.py',
+        arguments=[
+            '-file', os.path.join(pkg_share, 'models', 'paper_bag', 'model.sdf'),
+            '-entity', 'paper_bag',
+            '-x', '0.149999',   # closer to arm
+            '-y', '-0.756014',
+            '-z', '0.059275',   # half of 0.12 height
+        ],
+        output='screen',
+    )
+
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
         executable='spawner',
@@ -62,6 +75,7 @@ def generate_launch_description():
         output='screen',
     )
 
+
     return LaunchDescription([
         # Tell gazebo_ros2_control to load URDF from file, not param server.
         # This env var is checked by the plugin before it tries the param route.
@@ -69,6 +83,7 @@ def generate_launch_description():
         gazebo,
         robot_state_publisher_node,
         spawn_entity,
+        spawn_bag,
         RegisterEventHandler(
             event_handler=OnProcessExit(
                 target_action=spawn_entity,
@@ -81,4 +96,5 @@ def generate_launch_description():
                 on_exit=[arm_controller_spawner, gripper_controller_spawner],
             )
         ),
+
     ])

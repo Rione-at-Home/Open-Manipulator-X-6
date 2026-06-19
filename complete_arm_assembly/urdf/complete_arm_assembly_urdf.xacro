@@ -163,7 +163,6 @@
     </collision>
   </link>
 
-  <!-- joint_5 damping increased to stabilize wrist carrying finger loads -->
   <joint name="joint_5" type="revolute">
     <origin xyz="0.086402 0.02425 0.0005" rpy="0.036324 0 0" />
     <parent link="link_4" />
@@ -177,10 +176,6 @@
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <mass value="0.05" />
-      <!-- Parallel axis theorem: joint origin is ~1.63m in Y, ~1.79m in Z from link_5
-           ixx = 0.0001 + 0.05*(1.6285^2 + 1.7856^2) = 0.292
-           iyy = 0.0001 + 0.05*(0.019^2  + 1.7856^2) = 0.159
-           izz = 0.0001 + 0.05*(0.019^2  + 1.6285^2) = 0.133 -->
       <inertia ixx="0.292" ixy="0" ixz="0"
                            iyy="0.159" iyz="0"
                                        izz="0.133" />
@@ -200,13 +195,12 @@
     </collision>
   </link>
 
-  <!-- Finger joint damping massively increased to suppress oscillation from large lever arm -->
   <joint name="left_finger_joint" type="prismatic">
     <origin xyz="-0.019263 -1.6285 -1.7856" rpy="0 0 0" />
     <parent link="link_5" />
     <child link="left_finger" />
     <axis xyz="0 0 1" />
-    <limit lower="0" upper="0.019" effort="20" velocity="0.2" />
+    <limit lower="0" upper="0.019" effort="5" velocity="0.1" />
     <dynamics damping="50.0" friction="5.0"/>
   </joint>
 
@@ -214,10 +208,6 @@
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <mass value="0.05" />
-      <!-- Parallel axis theorem: joint origin is ~1.61m in Y, ~1.79m in Z from link_5
-           ixx = 0.0001 + 0.05*(1.6058^2 + 1.7856^2) = 0.288
-           iyy = 0.0001 + 0.05*(0.019^2  + 1.7856^2) = 0.159
-           izz = 0.0001 + 0.05*(0.019^2  + 1.6058^2) = 0.129 -->
       <inertia ixx="0.288" ixy="0" ixz="0"
                            iyy="0.159" iyz="0"
                                        izz="0.129" />
@@ -242,9 +232,8 @@
     <parent link="link_5" />
     <child link="right_finger" />
     <axis xyz="0 0 -1" />
-    <limit lower="-0.019" upper="0.0" effort="20" velocity="0.2" />
+    <limit lower="-0.019" upper="0.0" effort="5" velocity="0.1" />
     <dynamics damping="50.0" friction="5.0"/>
-
   </joint>
 
   <ros2_control name="GazeboSystem" type="system">
@@ -308,7 +297,6 @@
       <robot_param>robot_description</robot_param>
       <robot_param_node>robot_state_publisher</robot_param_node>
     </plugin>
-
   </gazebo>
 
 </robot>

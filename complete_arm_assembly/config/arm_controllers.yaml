@@ -1,10 +1,13 @@
 controller_manager:
   ros__parameters:
     update_rate: 100
+
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
+
     arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
+
     gripper_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
@@ -12,13 +15,13 @@ gazebo_ros2_control:
   ros__parameters:
     pid_gains:
       position:
-        joint_1:            {kp: 100.0, kd: 5.0,  ki: 0.5,  max_integral_error: 1.0}
-        joint_2:            {kp: 100.0, kd: 5.0,  ki: 0.5,  max_integral_error: 1.0}
-        joint_3:            {kp: 80.0,  kd: 4.0,  ki: 0.3,  max_integral_error: 1.0}
-        joint_4:            {kp: 60.0,  kd: 3.0,  ki: 0.3,  max_integral_error: 1.0}
-        joint_5:            {kp: 40.0,  kd: 2.0,  ki: 0.1,  max_integral_error: 0.5}
-        left_finger_joint:  {kp: 200.0,  kd: 20.0, ki: 0.1,  max_integral_error: 0.05}
-        right_finger_joint: {kp: 200.0,  kd: 20.0, ki: 0.1,  max_integral_error: 0.05}
+        joint_1:            {kp: 40.0, kd: 1.5, ki: 0.05, max_integral_error: 0.5}
+        joint_2:            {kp: 40.0, kd: 1.5, ki: 0.05, max_integral_error: 0.5}
+        joint_3:            {kp: 30.0, kd: 1.0, ki: 0.05, max_integral_error: 0.5}
+        joint_4:            {kp: 25.0, kd: 1.0, ki: 0.05, max_integral_error: 0.5}
+        joint_5:            {kp: 15.0, kd: 0.5, ki: 0.01, max_integral_error: 0.2}
+        left_finger_joint:  {kp: 2.0,  kd: 5.0, ki: 0.0,  max_integral_error: 0.01}
+        right_finger_joint: {kp: 2.0,  kd: 5.0, ki: 0.0,  max_integral_error: 0.01}
 
 arm_controller:
   ros__parameters:

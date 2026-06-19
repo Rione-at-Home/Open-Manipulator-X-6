@@ -1,10 +1,10 @@
 import os
+import re
 import subprocess
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import (IncludeLaunchDescription, RegisterEventHandler,
-                            SetEnvironmentVariable)
+from launch.actions import IncludeLaunchDescription, RegisterEventHandler
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
@@ -21,6 +21,15 @@ def generate_launch_description():
     with open(urdf_path, 'w') as f:
         f.write(urdf_content)
 
+    stripped = urdf_content
+    stripped = re.sub(r'<\?xml[^?]*\?>', '', stripped)
+    robot_start = stripped.find('<robot')
+    if robot_start > 0:
+        preamble = stripped[:robot_start]
+        preamble = re.sub(r'<!--.*?-->', '', preamble, flags=re.DOTALL)
+        stripped = preamble + stripped[robot_start:]
+    stripped = stripped.strip()
+
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_gazebo_ros, 'launch', 'gazebo.launch.py')
@@ -31,7 +40,7 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
-        parameters=[{'robot_description': urdf_content}],
+        parameters=[{'robot_description': stripped}],
     )
 
     spawn_entity = Node(
@@ -47,9 +56,9 @@ def generate_launch_description():
         arguments=[
             '-file', os.path.join(pkg_share, 'models', 'paper_bag', 'model.sdf'),
             '-entity', 'paper_bag',
-            '-x', '0.149999',   # closer to arm
-            '-y', '-0.756014',
-            '-z', '0.059275',   # half of 0.12 height
+            '-x', '0.135640',
+            '-y', '-0.843229',
+            '-z', '0.059352',
         ],
         output='screen',
     )
@@ -75,11 +84,7 @@ def generate_launch_description():
         output='screen',
     )
 
-
     return LaunchDescription([
-        # Tell gazebo_ros2_control to load URDF from file, not param server.
-        # This env var is checked by the plugin before it tries the param route.
-        SetEnvironmentVariable('GAZEBO_ROS2_CONTROL_URDF_FILE', urdf_path),
         gazebo,
         robot_state_publisher_node,
         spawn_entity,
@@ -96,5 +101,4 @@ def generate_launch_description():
                 on_exit=[arm_controller_spawner, gripper_controller_spawner],
             )
         ),
-
     ])

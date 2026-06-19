@@ -39,7 +39,7 @@ def main():
         policy          = 'MlpPolicy',
         env             = env,
         learning_rate   = 3e-4,
-        n_steps         = 512,
+        n_steps         = 2048,
         batch_size      = 64,
         n_epochs        = 10,
         gamma           = 0.99,

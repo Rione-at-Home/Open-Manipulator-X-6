@@ -1,47 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
-     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
-     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
-<robot
-  name="paperbag">
-  <link
-    name="base_link">
+<robot name="paperbag">
+  <link name="base_link">
+    
     <inertial>
-      <origin
-        xyz="2.5024E-16 0.20723 3.1463E-16"
-        rpy="0 0 0" />
-      <mass
-        value="0.10922" />
-      <inertia
-        ixx="0.0013362"
-        ixy="-2.0636E-18"
-        ixz="1.4703E-19"
-        iyy="0.00070842"
-        iyz="3.2043E-18"
-        izz="0.001041" />
+      <origin xyz="2.5024E-16 0.20723 3.1463E-16" rpy="0 0 0" />
+      <mass value="0.10922" />
+      <inertia ixx="0.0013362" ixy="-2.0636E-18" ixz="1.4703E-19" iyy="0.00070842" iyz="3.2043E-18" izz="0.001041" />
     </inertial>
+
     <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+      <origin xyz="0 0 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://paperbag/meshes/base_link.STL" />
+        <mesh filename="package://paperbag/meshes/base_link.STL" />
       </geometry>
-      <material
-        name="">
-        <color
-          rgba="0.98824 0.73725 0.51765 1" />
+      <material name="brown_paper">
+        <color rgba="0.98824 0.73725 0.51765 1" />
       </material>
     </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
+
+    <collision name="main_body_collision">
+      <origin xyz="0 0.15 0" rpy="0 0 0" />
       <geometry>
-        <mesh
-          filename="package://paperbag/meshes/base_link.STL" />
+        <box size="0.12 0.30 0.20" />
       </geometry>
     </collision>
+
+    <collision name="left_handle_collision">
+      <origin xyz="-0.05 0.33 0" rpy="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="0.06"/>
+      </geometry>
+    </collision>
+
+    <collision name="right_handle_collision">
+      <origin xyz="0.05 0.33 0" rpy="0 0 0" />
+      <geometry>
+        <cylinder radius="0.005" length="0.06"/>
+      </geometry>
+    </collision>
+
+    <collision name="top_bar_collision">
+      <origin xyz="0 0.36 0" rpy="1.5708 0 0" /> 
+      <geometry>
+        <cylinder radius="0.006" length="0.10"/>
+      </geometry>
+    </collision>
+
   </link>
+
+  <gazebo reference="base_link">
+    <kp>1000000.0</kp>
+    <kd>1.0</kd>
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+    <material>Gazebo/Wood</material> </gazebo>
+
 </robot>

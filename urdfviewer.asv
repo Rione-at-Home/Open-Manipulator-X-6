@@ -1,0 +1,11 @@
+%
+%% urdfviewer.m
+%
+% 
+%
+
+cd('C:\Users\Lanie\Documents\Ri-One\Projects\Open Manipulator X6\paperbag\urdf')
+robot = importrobot('paperbag.urdf');
+figure
+show(robot,'Frames','on');
+axis equal

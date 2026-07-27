@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     port: "/dev/ttyUSB0"
-    baudrate: 57600
+    baudrate: 1000000
     joint_ids: [11, 12, 13, 14, 15, 2]
     joint_names:
       - "joint1"

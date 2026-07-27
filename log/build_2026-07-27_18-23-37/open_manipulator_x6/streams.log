@@ -1,0 +1,47 @@
+[0.547s] Invoking command in '/home/ri-one/open-manipulator-x-6/src/open-manipulator-x-6': PYTHONPATH=/home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/open_manipulator_x6 build --build-base /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build install --record /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/install.log --single-version-externally-managed install_data
+[0.751s] running egg_info
+[0.751s] creating ../../build/open_manipulator_x6/open_manipulator_x6.egg-info
+[0.752s] writing ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/PKG-INFO
+[0.752s] writing dependency_links to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/dependency_links.txt
+[0.752s] writing entry points to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/entry_points.txt
+[0.752s] writing requirements to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/requires.txt
+[0.752s] writing top-level names to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/top_level.txt
+[0.752s] writing manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+[0.753s] reading manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+[0.754s] writing manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+[0.754s] running build
+[0.754s] running build_py
+[0.754s] creating /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build
+[0.754s] creating /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib
+[0.754s] creating /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+[0.754s] copying open_manipulator_x6/__init__.py -> /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+[0.754s] copying open_manipulator_x6/dynamixel_driver.py -> /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+[0.754s] copying open_manipulator_x6/arm_driver.py -> /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+[0.754s] copying open_manipulator_x6/utils.py -> /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+[0.754s] running install
+[0.754s] running install_lib
+[0.755s] creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+[0.755s] copying /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/__init__.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+[0.755s] copying /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/dynamixel_driver.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+[0.755s] copying /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/arm_driver.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+[0.755s] copying /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/utils.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+[0.755s] byte-compiling /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__init__.py to __init__.cpython-310.pyc
+[0.756s] byte-compiling /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/dynamixel_driver.py to dynamixel_driver.cpython-310.pyc
+[0.756s] byte-compiling /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/arm_driver.py to arm_driver.cpython-310.pyc
+[0.758s] byte-compiling /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/utils.py to utils.cpython-310.pyc
+[0.758s] running install_data
+[0.758s] creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/ament_index
+[0.758s] creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/ament_index/resource_index
+[0.758s] creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/ament_index/resource_index/packages
+[0.758s] copying resource/open_manipulator_x6 -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/ament_index/resource_index/packages
+[0.758s] copying package.xml -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6
+[0.758s] creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6/launch
+[0.758s] copying launch/arm.launch.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6/launch
+[0.758s] creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6/config
+[0.758s] copying config/motors.yaml -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6/config
+[0.758s] running install_egg_info
+[0.760s] Copying ../../build/open_manipulator_x6/open_manipulator_x6.egg-info to /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6-0.1.0-py3.10.egg-info
+[0.760s] running install_scripts
+[0.776s] Installing arm_driver script to /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/open_manipulator_x6
+[0.776s] writing list of installed files to '/home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/install.log'
+[0.793s] Invoked command in '/home/ri-one/open-manipulator-x-6/src/open-manipulator-x-6' returned '0': PYTHONPATH=/home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/open_manipulator_x6 build --build-base /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build install --record /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/install.log --single-version-externally-managed install_data

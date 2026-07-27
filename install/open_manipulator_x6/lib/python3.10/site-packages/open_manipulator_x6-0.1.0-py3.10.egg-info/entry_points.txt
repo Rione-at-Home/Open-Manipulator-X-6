@@ -1,0 +1,3 @@
+[console_scripts]
+arm_driver = open_manipulator_x6.arm_driver:main
+

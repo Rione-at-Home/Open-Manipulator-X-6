@@ -1,0 +1,45 @@
+running egg_info
+creating ../../build/open_manipulator_x6/open_manipulator_x6.egg-info
+writing ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/PKG-INFO
+writing dependency_links to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/dependency_links.txt
+writing entry points to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/entry_points.txt
+writing requirements to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/requires.txt
+writing top-level names to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/top_level.txt
+writing manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+reading manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+writing manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+running build
+running build_py
+creating /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build
+creating /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib
+creating /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/__init__.py -> /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/dynamixel_driver.py -> /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/arm_driver.py -> /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/utils.py -> /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+running install
+running install_lib
+creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/__init__.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/dynamixel_driver.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/arm_driver.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/utils.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+byte-compiling /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__init__.py to __init__.cpython-310.pyc
+byte-compiling /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/dynamixel_driver.py to dynamixel_driver.cpython-310.pyc
+byte-compiling /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/arm_driver.py to arm_driver.cpython-310.pyc
+byte-compiling /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/utils.py to utils.cpython-310.pyc
+running install_data
+creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/ament_index
+creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/ament_index/resource_index
+creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/ament_index/resource_index/packages
+copying resource/open_manipulator_x6 -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/ament_index/resource_index/packages
+copying package.xml -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6
+creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6/launch
+copying launch/arm.launch.py -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6/launch
+creating /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6/config
+copying config/motors.yaml -> /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/share/open_manipulator_x6/config
+running install_egg_info
+Copying ../../build/open_manipulator_x6/open_manipulator_x6.egg-info to /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6-0.1.0-py3.10.egg-info
+running install_scripts
+Installing arm_driver script to /home/ri-one/open-manipulator-x-6/install/open_manipulator_x6/lib/open_manipulator_x6
+writing list of installed files to '/home/ri-one/open-manipulator-x-6/build/open_manipulator_x6/install.log'

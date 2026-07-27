@@ -15,7 +15,7 @@ setup(
         (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
-    zip_safe=true,
+    zip_safe=True,
     maintainer='ri-one',
     maintainer_email='dev@todo.todo',
     description='ROS 2 driver for 6-DOF OpenManipulator-X arm.',

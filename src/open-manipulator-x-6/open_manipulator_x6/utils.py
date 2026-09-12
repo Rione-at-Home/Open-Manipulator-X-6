@@ -11,6 +11,10 @@ RAW_VEL_TO_RAD_S = 0.229 * (2.0 * math.pi / 60.0)  # 1 unit = 0.229 RPM
 RAD_S_TO_RAW_VEL = 1.0 / RAW_VEL_TO_RAD_S
 RAW_CURRENT_TO_EFFORT = 2.69 / 1000.0              # 1 unit = 2.69 mA (~Torque representation)
 
+# Voltage & Temperature Units
+RAW_VOLTAGE_TO_VOLTS = 0.1  # 1 unit = 0.1 V
+# Present Temperature register already reports whole degrees Celsius (1 unit = 1 degC)
+
 
 def rad_to_ticks(rad: float) -> int:
     """
@@ -51,3 +55,17 @@ def raw_current_to_effort(raw_current: int) -> float:
     if raw_current > 32767:
         raw_current -= 65536
     return float(raw_current) * RAW_CURRENT_TO_EFFORT
+
+
+def raw_voltage_to_volts(raw_voltage: int) -> float:
+    """
+    Converts raw present-voltage register reading to volts.
+    """
+    return float(raw_voltage) * RAW_VOLTAGE_TO_VOLTS
+
+
+def raw_temperature_to_celsius(raw_temp: int) -> float:
+    """
+    Converts raw present-temperature register reading to degrees Celsius.
+    """
+    return float(raw_temp)

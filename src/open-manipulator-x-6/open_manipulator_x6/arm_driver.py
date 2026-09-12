@@ -222,7 +222,6 @@ class ArmDriver(Node):
 
         return diag_array
 
-    # --- Main Loop (50 Hz) ---
     def update_loop(self):
         states = self.driver.read_states(self.joint_ids)
         if not states:

@@ -3,13 +3,16 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Empty, String
 from std_srvs.srv import SetBool, Trigger
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 
 from .dynamixel_driver import DynamixelHardwareDriver
 from .utils import (
     rad_s_to_raw_vel,
     rad_to_ticks,
     raw_current_to_effort,
+    raw_temperature_to_celsius,
     raw_vel_to_rad_s,
+    raw_voltage_to_volts,
     ticks_to_rad,
 )
 
@@ -23,20 +26,28 @@ class ArmDriver(Node):
         self.declare_parameter("port", "/dev/ttyACM0") # Check the actual port name on your system
         self.declare_parameter("baudrate", 1000000)  # 1 Mbps . Check the actual baudrate for your Dynamixel motors
 
-        self.declare_parameter("joint_ids", [11, 12, 13, 14, 15, 2])
+        # NOTE: gripper ID (6) is a placeholder — swap in the real ID once you
+        # finish renumbering (you mentioned landing on 1 and 6 eventually).
+        self.declare_parameter("joint_ids", [11, 12, 13, 14, 15, 2, 6])
 
         self.declare_parameter(
             "joint_names",
-            ["joint1", "joint2", "joint3", "joint4", "joint5", "wrist_rotate"],
+            ["joint1", "joint2", "joint3", "joint4", "joint5", "wrist_rotate", "gripper"],
 
         )
-        self.declare_parameter("home_positions", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.declare_parameter("home_positions", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        # Diagnostic thresholds (deg C) — tune to your servo's Temperature Limit register
+        self.declare_parameter("temperature_warn_c", 70.0)
+        self.declare_parameter("temperature_error_c", 80.0)
 
         self.port = self.get_parameter("port").get_parameter_value().string_value
         self.baudrate = self.get_parameter("baudrate").get_parameter_value().integer_value
         self.joint_ids = list(self.get_parameter("joint_ids").get_parameter_value().integer_array_value)
         self.joint_names = list(self.get_parameter("joint_names").get_parameter_value().string_array_value)
         self.home_positions = list(self.get_parameter("home_positions").get_parameter_value().double_array_value)
+        self.temp_warn_c = self.get_parameter("temperature_warn_c").get_parameter_value().double_value
+        self.temp_error_c = self.get_parameter("temperature_error_c").get_parameter_value().double_value
 
         self.joint_map = dict(zip(self.joint_names, self.joint_ids))
         self.id_to_index = {m_id: idx for idx, m_id in enumerate(self.joint_ids)}
@@ -56,6 +67,7 @@ class ArmDriver(Node):
         # Publishers & Subscribers 
         self.joint_pub = self.create_publisher(JointState, "/joint_states", 10)
         self.status_pub = self.create_publisher(String, "/arm_status", 10)
+        self.diag_pub = self.create_publisher(DiagnosticArray, "/arm_diagnostics", 10)
 
         self.create_subscription(JointState, "/arm_command", self.arm_command_cb, 10)
         self.create_subscription(Bool, "/arm_enable", self.arm_enable_cb, 10)
@@ -160,7 +172,56 @@ class ArmDriver(Node):
         response.message = "Motors rebooted successfully" if all_ok else "One or more motors failed reboot"
         return response
 
-    # --- Main Loop (50 Hz) ---
+    # Diagonistcs to check the following from the motor:
+    # - current
+    # - voltage
+    # - temperature
+    def build_diagnostics(self, states: dict) -> DiagnosticArray:
+        diag_array = DiagnosticArray()
+        diag_array.header.stamp = self.get_clock().now().to_msg()
+
+        for idx, m_id in enumerate(self.joint_ids):
+            status = DiagnosticStatus()
+            status.name = f"arm_driver: {self.joint_names[idx]} (ID {m_id})"
+            status.hardware_id = str(m_id)
+
+            state = states.get(m_id)
+            if state is None:
+                status.level = DiagnosticStatus.STALE
+                status.message = "No data received from motor"
+                diag_array.status.append(status)
+                continue
+
+            current = raw_current_to_effort(state["current"])
+            voltage = raw_voltage_to_volts(state["voltage"]) if "voltage" in state else None
+            temperature = (
+                raw_temperature_to_celsius(state["temperature"]) if "temperature" in state else None
+            )
+
+            level = DiagnosticStatus.OK
+            messages = []
+
+            if temperature is not None:
+                if temperature >= self.temp_error_c:
+                    level = DiagnosticStatus.ERROR
+                    messages.append(f"Overtemperature ({temperature:.1f} C)")
+                elif temperature >= self.temp_warn_c:
+                    level = max(level, DiagnosticStatus.WARN)
+                    messages.append(f"High temperature ({temperature:.1f} C)")
+
+            status.level = level
+            status.message = "; ".join(messages) if messages else "OK"
+
+            status.values.append(KeyValue(key="Current (A)", value=f"{current:.3f}"))
+            if voltage is not None:
+                status.values.append(KeyValue(key="Voltage (V)", value=f"{voltage:.2f}"))
+            if temperature is not None:
+                status.values.append(KeyValue(key="Temperature (C)", value=f"{temperature:.1f}"))
+
+            diag_array.status.append(status)
+
+        return diag_array
+
     def update_loop(self):
         states = self.driver.read_states(self.joint_ids)
         if not states:
@@ -197,6 +258,8 @@ class ArmDriver(Node):
         status_msg = String()
         status_msg.data = self.status
         self.status_pub.publish(status_msg)
+
+        self.diag_pub.publish(self.build_diagnostics(states))
 
     def destroy_node(self):
         self.enable_torque(False)

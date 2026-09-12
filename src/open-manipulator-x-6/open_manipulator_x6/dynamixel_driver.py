@@ -15,9 +15,13 @@ ADDR_GOAL_POSITION = 116
 ADDR_PRESENT_CURRENT = 126
 ADDR_PRESENT_VELOCITY = 128
 ADDR_PRESENT_POSITION = 132
+ADDR_PRESENT_VOLTAGE = 144
+ADDR_PRESENT_TEMPERATURE = 146
 
 LEN_GOAL_POSITION = 4
-LEN_PRESENT_STATE = 10  # Current (2B) + Velocity (4B) + Position (4B)
+# Current(2B) + Velocity(4B) + Position(4B) + Vel Trajectory(4B) + Pos Trajectory(4B)
+# + Input Voltage(2B) + Temperature(1B) = 21B, read in one contiguous block (126-146)
+LEN_PRESENT_STATE = 21
 
 POSITION_CONTROL_MODE = 3
 PROTOCOL_VERSION = 2.0
@@ -129,7 +133,8 @@ class DynamixelHardwareDriver:
 
     def read_states(self, joint_ids: list) -> dict:
         """
-        Reads current, velocity, and position for all joint IDs in a single packet.
+        Reads current, velocity, position, voltage, and temperature for all
+        joint IDs in a single packet.
         """
         self.sync_read_state.clearParam()
         for m_id in joint_ids:
@@ -142,12 +147,22 @@ class DynamixelHardwareDriver:
             return states
 
         for m_id in joint_ids:
-            
+
             if self.sync_read_state.isAvailable(m_id, ADDR_PRESENT_CURRENT, 2):
                 curr = self.sync_read_state.getData(m_id, ADDR_PRESENT_CURRENT, 2)
                 vel = self.sync_read_state.getData(m_id, ADDR_PRESENT_VELOCITY, 4)
                 pos = self.sync_read_state.getData(m_id, ADDR_PRESENT_POSITION, 4)
                 states[m_id] = {"current": curr, "velocity": vel, "position": pos}
+
+                if self.sync_read_state.isAvailable(m_id, ADDR_PRESENT_VOLTAGE, 2):
+                    states[m_id]["voltage"] = self.sync_read_state.getData(
+                        m_id, ADDR_PRESENT_VOLTAGE, 2
+                    )
+
+                if self.sync_read_state.isAvailable(m_id, ADDR_PRESENT_TEMPERATURE, 1):
+                    states[m_id]["temperature"] = self.sync_read_state.getData(
+                        m_id, ADDR_PRESENT_TEMPERATURE, 1
+                    )
 
         return states
 

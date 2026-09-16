@@ -140,7 +140,7 @@ class DynamixelHardwareDriver:
         for m_id in joint_ids:
             self.sync_read_state.addParam(m_id)
 
-        comm_result = self.sync_read_state.rxPacket()
+        comm_result = self.sync_read_state.txRxPacket()
         states = {}
 
         if comm_result != COMM_SUCCESS:

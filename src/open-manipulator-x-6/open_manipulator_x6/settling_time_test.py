@@ -12,6 +12,7 @@ settling time used to size the "consecutive quiet samples" dwell window
 Usage:
     python3 settling_time_test.py --moving-id 2 --step-rad 0.3 --trials 5
     python3 settling_time_test.py --moving-id 2 --step-rad 0.3 --trials 6 --alternate
+    python3 settling_time_test.py --moving-id 1 --step-rad 0.6 --trials 5 --alternate
 """
 
 import argparse
@@ -215,7 +216,7 @@ def main():
                      help="Settling band as a fraction of the step size (default 2%%).")
     ap.add_argument("--dwell-samples", type=int, default=10,
                      help="Consecutive in-band samples required to declare settled.")
-    ap.add_argument("--timeout", type=float, default=3.0, help="Per-trial timeout, seconds.")
+    ap.add_argument("--timeout", type=float, default=6.0, help="Per-trial timeout, seconds.")
     ap.add_argument("--settle-time-warn", type=float, default=None,
                      help="If a trial exceeds this many seconds without settling, warn loudly.")
     ap.add_argument("--kappa", type=float, default=1.75,

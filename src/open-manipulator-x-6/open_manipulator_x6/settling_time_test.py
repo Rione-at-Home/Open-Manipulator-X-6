@@ -200,9 +200,9 @@ def write_summary_csv(results: list, out_dir: Path):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--port", default="/dev/ttyACM0")
+    ap.add_argument("--port", default="/dev/ttyUSB0")
     ap.add_argument("--baudrate", type=int, default=1_000_000)
-    ap.add_argument("--joint-ids", type=int, nargs="+", default=[11, 12, 13, 14, 15, 2, 6],
+    ap.add_argument("--joint-ids", type=int, nargs="+", default=[11, 12, 13, 14, 15, 2, 1],
                      help="All joints to hold/monitor (default matches arm_driver.py).")
     ap.add_argument("--moving-id", type=int, default=2,
                      help="Which joint ID to step (default 2 = wrist_rotate).")

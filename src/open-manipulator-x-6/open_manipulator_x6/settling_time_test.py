@@ -204,7 +204,7 @@ def main():
     ap.add_argument("--baudrate", type=int, default=1_000_000)
     ap.add_argument("--joint-ids", type=int, nargs="+", default=[11, 12, 13, 14, 15, 2, 1],
                      help="All joints to hold/monitor (default matches arm_driver.py).")
-    ap.add_argument("--moving-id", type=int, default=2,
+    ap.add_argument("--moving-id", type=int, default=1,
                      help="Which joint ID to step (default 2 = wrist_rotate).")
     ap.add_argument("--step-rad", type=float, default=0.3,
                      help="Step size in radians. Sign sets direction.")

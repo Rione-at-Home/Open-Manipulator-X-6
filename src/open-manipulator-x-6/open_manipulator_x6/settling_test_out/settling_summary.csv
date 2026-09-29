@@ -1,0 +1,6 @@
+trial,moving_id,step_rad,start_rad,target_rad,settle_time_s,achieved_rate_hz,clamped
+0,1,0.3000,-0.2500,0.0500,,62.9,False
+1,1,0.3000,0.0276,0.3276,0.2772,64.9,False
+2,1,0.3000,0.3298,0.6298,0.2458,65.1,False
+3,1,0.3000,0.6259,0.9259,,62.9,False
+4,1,0.3000,0.9097,1.2097,,62.8,False

@@ -28,7 +28,7 @@ class ArmDriver(Node):
 
         # NOTE: gripper ID (6) is a placeholder — swap in the real ID once you
         # finish renumbering (you mentioned landing on 1 and 6 eventually).
-        self.declare_parameter("joint_ids", [11, 12, 13, 14, 15, 2, 6])
+        self.declare_parameter("joint_ids", [11, 12, 13, 14, 15, 2, 1])
 
         self.declare_parameter(
             "joint_names",

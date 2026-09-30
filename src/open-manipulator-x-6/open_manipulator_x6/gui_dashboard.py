@@ -14,13 +14,13 @@ class SettlingTimeDashboard:
         self.root.title("Settling Time Characterization Dashboard")
         self.root.geometry("850x700")
         
-        # Define the script arguments, their types, and default values matching the script
+        # Define the script arguments, their types, and default values matching the script[cite: 2]
         self.args_config = {
             "Connection & Hardware": {
                 "--port": ("/dev/ttyUSB0", str),
                 "--baudrate": ("1000000", int),
-                "--joint-ids": ("1 2 3 4 5 6 7", str),
-                "--moving-id": ("1", int)
+                "--joint-ids": ("11 12 13 14 15 2 6", str),
+                "--moving-id": ("11", int)
             },
             "Test Parameters": {
                 "--reference-rad": ("0.0", float),
@@ -35,7 +35,7 @@ class SettlingTimeDashboard:
                 "--min-band-ticks": ("2.0", float),
                 "--dwell-samples": ("10", int),
                 "--timeout": ("3.0", float),
-                "--return-timeout": ("", str)  # Empty means None
+                "--return-timeout": ("", str)  # Empty means None[cite: 2]
             },
             "Gains & Outputs": {
                 "--kappa": ("1.75", float),
@@ -54,7 +54,7 @@ class SettlingTimeDashboard:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Dashboard Parameters (Grid Layout)
+        # Dashboard Parameters (Grid Layout)[cite: 2]
         params_frame = ttk.Frame(main_frame)
         params_frame.pack(fill=tk.X, pady=(0, 10))
         
@@ -81,20 +81,24 @@ class SettlingTimeDashboard:
                 row += 1
             col += 1
 
-        # Run Button
+        # Run Button[cite: 2]
         self.run_btn = ttk.Button(main_frame, text="Run Test", command=self.start_test)
         self.run_btn.pack(pady=10)
         
-        # Console Output
+        # Console Output[cite: 2]
         self.console = scrolledtext.ScrolledText(main_frame, height=15, bg="black", fg="lightgreen", font=("Consolas", 10))
         self.console.pack(fill=tk.BOTH, expand=True)
 
     def start_test(self):
         self.run_btn.config(state=tk.DISABLED)
-        self.console.delete(1.0, tk.END)
         
-        # Construct command
-        cmd = ["python3", "settling_time_test.py"]
+        # Use a dashed line to indicate a new test instead of clearing the console[cite: 2]
+        self.log("\n" + "-" * 60 + "\n")
+        self.log("STARTING NEW TEST RUN\n")
+        self.log("-" * 60 + "\n")
+        
+        # Construct command with the -u flag for unbuffered output to ensure real-time logs[cite: 2]
+        cmd = ["python3", "-u", "settling_time_test.py"]
         for arg, var in self.vars.items():
             val = var.get()
             if isinstance(var, tk.BooleanVar):
@@ -108,7 +112,7 @@ class SettlingTimeDashboard:
                     
         self.log(f"Executing: {' '.join(cmd)}\n")
         
-        # Run in thread to keep GUI responsive
+        # Run in thread to keep GUI responsive[cite: 2]
         threading.Thread(target=self.run_process, args=(cmd,), daemon=True).start()
 
     def run_process(self, cmd):
@@ -140,7 +144,7 @@ class SettlingTimeDashboard:
             self.log(f"Error: Could not find {summary_file} to plot.\n")
             return
             
-        # Read summary data
+        # Read summary data[cite: 2]
         trials_meta = {}
         with open(summary_file, 'r') as f:
             reader = csv.DictReader(f)
@@ -152,7 +156,7 @@ class SettlingTimeDashboard:
                     "settle_time_s": float(row["settle_time_s"]) if row["settle_time_s"] else None
                 }
 
-        # Plot all trials
+        # Plot all trials[cite: 2]
         trial_files = sorted(glob.glob(str(out_dir / "trial_*.csv")))
         if not trial_files:
             return
@@ -160,7 +164,7 @@ class SettlingTimeDashboard:
         plt.figure(figsize=(10, 6))
         
         for file in trial_files:
-            # Extract trial index from filename (e.g. trial_00_step+0.300.csv)
+            # Extract trial index from filename (e.g. trial_00_step+0.300.csv)[cite: 2]
             trial_idx = int(Path(file).stem.split('_')[1])
             if trial_idx not in trials_meta:
                 continue
@@ -179,17 +183,17 @@ class SettlingTimeDashboard:
                     if row.get(pos_key):
                         positions.append(float(row[pos_key]))
                         
-            # Plot the response curve
+            # Plot the response curve[cite: 2]
             line, = plt.plot(times[:len(positions)], positions, label=f'Trial {trial_idx}')
             
-            # Draw settling bands and target for each trial
+            # Draw settling bands and target for each trial[cite: 2]
             plt.axhline(meta["target_rad"], color=line.get_color(), linestyle='--', alpha=0.5)
             plt.fill_between(times[:len(positions)], 
                              meta["target_rad"] - meta["band_rad"], 
                              meta["target_rad"] + meta["band_rad"], 
                              color=line.get_color(), alpha=0.1)
             
-            # Mark settle time if achieved
+            # Mark settle time if achieved[cite: 2]
             if meta["settle_time_s"] is not None:
                 plt.axvline(meta["settle_time_s"], color=line.get_color(), linestyle=':', alpha=0.8)
 
@@ -199,7 +203,7 @@ class SettlingTimeDashboard:
         plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
         plt.grid(True)
         plt.tight_layout()
-        plt.show()  # Opens interactive viewer with save capability
+        plt.show()
 
 if __name__ == "__main__":
     root = tk.Tk()

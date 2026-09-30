@@ -19,7 +19,7 @@ class SettlingTimeDashboard:
             "Connection & Hardware": {
                 "--port": ("/dev/ttyUSB0", str),
                 "--baudrate": ("1000000", int),
-                "--joint-ids": ("11 12 13 14 15 2 6", str),
+                "--joint-ids": ("1 2 3 4 5 6 7", str),
                 "--moving-id": ("11", int)
             },
             "Test Parameters": {

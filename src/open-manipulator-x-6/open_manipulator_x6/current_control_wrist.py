@@ -80,6 +80,32 @@ class SafetyAbort(Exception):
     pass
 
 
+def measure_bus_timing(driver: DynamixelHardwareDriver, moving_id: int, n: int = 50):
+    """
+    Isolates read vs write round-trip time so a slow control loop can be
+    diagnosed (USB-serial latency timer is a common culprit at ~16ms/call).
+    """
+    t0 = time.monotonic()
+    for _ in range(n):
+        driver.read_states([moving_id])
+    read_ms = (time.monotonic() - t0) / n * 1000
+
+    t0 = time.monotonic()
+    for _ in range(n):
+        driver.write_goal_current(moving_id, 0)
+    write_ms = (time.monotonic() - t0) / n * 1000
+
+    combined_hz = 1000.0 / (read_ms + write_ms)
+    print(f"Bus timing probe ({n} calls each): read={read_ms:.2f} ms/call, "
+          f"write={write_ms:.2f} ms/call -> combined loop ceiling ~{combined_hz:.1f} Hz")
+    if read_ms > 5 or write_ms > 5:
+        print("  [WARNING] >5ms per call is consistent with the USB-serial adapter's default")
+        print("  latency_timer (often 16ms on Linux). Check/set it, e.g.:")
+        print("    cat /sys/bus/usb-serial/devices/ttyUSB0/latency_timer")
+        print("    echo 1 | sudo tee /sys/bus/usb-serial/devices/ttyUSB0/latency_timer")
+    print()
+
+
 def connect_and_prepare(port, baudrate, joint_ids, moving_id):
     driver = DynamixelHardwareDriver(port=port, baudrate=baudrate)
     if not driver.connect():
@@ -327,6 +353,8 @@ def main():
     driver, other_ids = connect_and_prepare(args.port, args.baudrate, args.joint_ids, args.moving_id)
     results = []
 
+    measure_bus_timing(driver, args.moving_id)
+
     ctrl = dict(kp=args.kp, ki=args.ki, kd=args.kd, integral_max=args.integral_max,
                 grav_model=grav_model, friction_comp=args.friction_comp,
                 friction_eps_rad=args.friction_eps_rad, max_current_raw=args.max_current_raw,
@@ -352,10 +380,15 @@ def main():
 
             # Return to reference (chained, not a separate "command and wait" -
             # the loop never stops driving current between segments).
+            start_pos = ticks_to_rad(driver.read_states([args.moving_id])[args.moving_id]["position"])
             r_return = run_segment(driver, args.moving_id, "return", args.reference_rad,
                                     band_rad=band_rad, dwell_samples=args.dwell_samples,
                                     timeout_s=args.timeout, **ctrl)
             write_segment_csv(r_return, 2 * i, out_dir)
+            if r_return.settle_time_s is None:
+                print(f"  [WARNING] return-to-reference did not confirm within {args.timeout}s "
+                      f"(started {start_pos*1000:+.2f} mrad, final error {r_return.final_error_rad*1000:+.2f} mrad, "
+                      f"rate ~{r_return.achieved_rate_hz:.0f} Hz). Proceeding to next trial anyway.")
 
             print(f"Trial {i}: target {target:+.3f} rad "
                   f"(step {step:+.3f} from reference {args.reference_rad:.3f}) on joint {args.moving_id} ...")

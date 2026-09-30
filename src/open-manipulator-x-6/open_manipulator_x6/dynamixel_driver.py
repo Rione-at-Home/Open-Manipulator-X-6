@@ -190,49 +190,72 @@ class DynamixelHardwareDriver:
             return None
         return value
 
-    def set_operating_mode(self, joint_ids: list, mode: int = POSITION_CONTROL_MODE, retries: int = 3) -> bool:
+    def set_operating_mode(self, joint_ids: list, mode: int = POSITION_CONTROL_MODE, retries: int = 4) -> bool:
         """
         Sets operating mode. Torque must be disabled first.
-        Self-healing: applies a delay and verifies the EEPROM write, retrying
-        if the firmware silently rejected it due to back-to-back commands.
+        Diagnostic: verifies Torque is off, checks for Hardware Errors,
+        and diagnoses if the hardware actually supports the mode.
         """
         import time
 
-        # Disable torque for all requested joints
-        self.enable_torque(joint_ids, False)
-
-        # Pause to let the motor controllers fully disengage torque
-        # before we attempt an EEPROM write.
-        time.sleep(0.05)
-
+        # Hardware Error Status register for Protocol 2.0
+        ADDR_HARDWARE_ERROR = 70
         all_success = True
 
         for m_id in joint_ids:
             mode_set = False
+            hw_err = 0
+            torque_val = -1
+
             for attempt in range(retries):
-                # Write the requested mode
+                # 1. Force torque disable
+                self.enable_torque([m_id], False)
+                time.sleep(0.05)
+                
+                # Verify Torque actually turned off
+                torque_val, _, _ = self.packet_handler.read1ByteTxRx(self.port_handler, m_id, ADDR_TORQUE_ENABLE)
+                if torque_val != 0:
+                    self.logger.warning(
+                        f"ID {m_id} refused to disable torque (readback {torque_val}). "
+                        f"Retrying ({attempt + 1}/{retries})..."
+                    )
+                    continue
+
+                # 2. Write the requested Operating Mode
                 self.packet_handler.write1ByteTxRx(
                     self.port_handler, m_id, ADDR_OPERATING_MODE, mode
                 )
-
-                # Verify if the EEPROM write took effect
+                time.sleep(0.05)
+                
+                # 3. Verify if the EEPROM write took effect
                 actual_mode = self.read_operating_mode(m_id)
                 if actual_mode == mode:
                     mode_set = True
                     break
 
-                # If failed, log the silent rejection and pause longer before retrying
+                # 4. If failed, read Hardware Error Status to diagnose
+                hw_err, _, _ = self.packet_handler.read1ByteTxRx(self.port_handler, m_id, ADDR_HARDWARE_ERROR)
+                
                 self.logger.warning(
                     f"Mode write rejected for ID {m_id} (readback {actual_mode}, expected {mode}). "
-                    f"Retrying ({attempt + 1}/{retries})..."
+                    f"Torque: {torque_val}, HW Error: {hw_err}. Retrying ({attempt + 1}/{retries})..."
                 )
-                
-                # Re-assert torque disable just in case, then wait again
-                self.enable_torque([m_id], False)
-                time.sleep(0.05)
 
             if not mode_set:
-                self.logger.error(f"Failed to set mode {mode} on ID {m_id} after {retries} attempts.")
+                # Ultimate diagnosis
+                model_num = self.read_model_number(m_id)
+                err_msg = f"Failed to set mode {mode} on ID {m_id} after {retries} attempts."
+                
+                if hw_err != 0:
+                    err_msg += f" DIAGNOSIS: Joint is in a Hardware Error state (Code {hw_err}). Power-cycle required."
+                elif model_num == 1060 and mode == CURRENT_CONTROL_MODE:
+                    err_msg += f" DIAGNOSIS: ID {m_id} is an XL430-W250 (Model 1060). This model lacks a current sensor and physically DOES NOT support Current Control Mode."
+                elif torque_val != 0:
+                    err_msg += f" DIAGNOSIS: Torque stuck at {torque_val}. Another process may be forcing it active."
+                else:
+                    err_msg += f" DIAGNOSIS: Firmware persistently rejecting mode. Model Number: {model_num}."
+                    
+                self.logger.error(err_msg)
                 all_success = False
 
         return all_success

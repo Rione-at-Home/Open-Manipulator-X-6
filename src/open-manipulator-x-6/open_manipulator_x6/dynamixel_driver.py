@@ -175,6 +175,21 @@ class DynamixelHardwareDriver:
 
         return success
 
+    def read_operating_mode(self, motor_id: int) -> int | None:
+        """
+        Reads back the Operating Mode register. Use this to CONFIRM a mode
+        switch actually took effect - set_operating_mode() below does not
+        check its own write results, so a silently rejected write (e.g.
+        because torque wasn't fully disabled first) would otherwise go
+        unnoticed and the servo would stay in its previous mode.
+        """
+        value, comm_result, error = self.packet_handler.read1ByteTxRx(
+            self.port_handler, motor_id, ADDR_OPERATING_MODE
+        )
+        if comm_result != COMM_SUCCESS or error != 0:
+            return None
+        return value
+
     def set_operating_mode(self, joint_ids: list, mode: int = POSITION_CONTROL_MODE):
         """
         Sets operating mode (Torque must be disabled first).

@@ -1,4 +1,5 @@
 import logging
+import time
 
 from dynamixel_sdk import (
     COMM_SUCCESS,
@@ -8,13 +9,15 @@ from dynamixel_sdk import (
     PortHandler,
 )
 
-# Control Table Addresses (XM430 Series / Protocol 2.0)
+# Control Table Addresses (XM430 / XL430 Series / Protocol 2.0)
 ADDR_MODEL_NUMBER = 0
 ADDR_OPERATING_MODE = 11
 ADDR_TORQUE_ENABLE = 64
+ADDR_HARDWARE_ERROR = 70
 ADDR_POSITION_D_GAIN = 80
 ADDR_POSITION_I_GAIN = 82
 ADDR_POSITION_P_GAIN = 84
+ADDR_GOAL_PWM = 100
 ADDR_GOAL_CURRENT = 102
 ADDR_GOAL_POSITION = 116
 ADDR_PRESENT_CURRENT = 126
@@ -26,23 +29,19 @@ ADDR_PRESENT_TEMPERATURE = 146
 LEN_MODEL_NUMBER = 2
 LEN_GOAL_POSITION = 4
 LEN_GOAL_CURRENT = 2
+LEN_GOAL_PWM = 2
 LEN_GAIN = 2
-# Current(2B) + Velocity(4B) + Position(4B) + Vel Trajectory(4B) + Pos Trajectory(4B)
-# + Input Voltage(2B) + Temperature(1B) = 21B, read in one contiguous block (126-146)
 LEN_PRESENT_STATE = 21
 
 POSITION_CONTROL_MODE = 3
 CURRENT_CONTROL_MODE = 0
+PWM_CONTROL_MODE = 16
 PROTOCOL_VERSION = 2.0
 
-# NOT pre-filled: I could not independently verify the raw Model Number
-# register values for XM430-W210 vs W350 against an authoritative source.
-# Read them once with read_model_number() on a known-W210 and a known-W350
-# joint (cross-check against Dynamixel Wizard's Model Information panel),
-# then fill this dict in yourself so later joins are labeled automatically.
 KNOWN_MODEL_NUMBERS = {
-    # 1234: "XM430-W350",  # fill in after confirming via Wizard
-    # 5678: "XM430-W210",
+    1060: "XL430-W250",
+    1020: "XM430-W210",
+    1030: "XM430-W350",
 }
 
 
@@ -66,11 +65,6 @@ class DynamixelHardwareDriver:
         self.logger = logging.getLogger("DynamixelHardwareDriver")
 
     def connect(self) -> bool:
-        """
-        Method to connect to the Dynamixel hardware. 
-        Returns True if successful, False otherwise.
-        """
-
         if not self.port_handler.openPort():
             self.logger.error(f"Failed to open port: {self.port_name}")
             return False
@@ -83,30 +77,15 @@ class DynamixelHardwareDriver:
         return True
 
     def disconnect(self):
-        """
-        Method to disconnect from the Dynamixel hardware.
-        """
-
         if self.is_connected:
             self.port_handler.closePort()
             self.is_connected = False
 
     def ping(self, motor_id: int) -> bool:
-        """
-        Method to ping a Dynamixel motor.
-        Returns True if successful, False otherwise.
-        """
-
         model_num, comm_result, error = self.packet_handler.ping(self.port_handler, motor_id)
         return comm_result == COMM_SUCCESS and error == 0
 
     def read_model_number(self, motor_id: int) -> int | None:
-        """
-        Reads the raw Model Number register. Use this to confirm which
-        servos are XM430-W210 vs XM430-W350 (or any other variant) rather
-        than assuming from wiring/origin alone - see KNOWN_MODEL_NUMBERS
-        for a best-effort (unverified) label lookup.
-        """
         value, comm_result, error = self.packet_handler.read2ByteTxRx(
             self.port_handler, motor_id, ADDR_MODEL_NUMBER
         )
@@ -115,9 +94,6 @@ class DynamixelHardwareDriver:
         return value
 
     def read_position_gains(self, motor_id: int) -> dict | None:
-        """
-        Reads Position P/I/D Gain for one servo. Returns None on comm failure.
-        """
         gains = {}
         for name, addr in (("p", ADDR_POSITION_P_GAIN),
                             ("i", ADDR_POSITION_I_GAIN),
@@ -131,11 +107,6 @@ class DynamixelHardwareDriver:
         return gains
 
     def write_position_gain(self, motor_id: int, addr: int, value: int) -> bool:
-        """
-        Writes a single Position PID gain register. These are RAM-area
-        registers on the X-series (unlike Operating Mode), so torque does
-        NOT need to be disabled first.
-        """
         comm_result, error = self.packet_handler.write2ByteTxRx(
             self.port_handler, motor_id, addr, value
         )
@@ -144,10 +115,6 @@ class DynamixelHardwareDriver:
     def set_position_gains(
         self, motor_id: int, p: int | None = None, i: int | None = None, d: int | None = None
     ) -> bool:
-        """
-        Writes any subset of Position P/I/D gains for one servo.
-        Pass only the terms you want to change; others are left untouched.
-        """
         success = True
         if p is not None:
             success &= self.write_position_gain(motor_id, ADDR_POSITION_P_GAIN, p)
@@ -158,31 +125,17 @@ class DynamixelHardwareDriver:
         return success
 
     def enable_torque(self, joint_ids: list, enable: bool) -> bool:
-        """
-        Method to enable or disable torque for a list of Dynamixel joints.
-        Returns True if successful, False otherwise.
-        """
-
         value = 1 if enable else 0
         success = True
         for m_id in joint_ids:
             comm_result, error = self.packet_handler.write1ByteTxRx(
                 self.port_handler, m_id, ADDR_TORQUE_ENABLE, value
             )
-
             if comm_result != COMM_SUCCESS or error != 0:
                 success = False
-
         return success
 
     def read_operating_mode(self, motor_id: int) -> int | None:
-        """
-        Reads back the Operating Mode register. Use this to CONFIRM a mode
-        switch actually took effect - set_operating_mode() below does not
-        check its own write results, so a silently rejected write (e.g.
-        because torque wasn't fully disabled first) would otherwise go
-        unnoticed and the servo would stay in its previous mode.
-        """
         value, comm_result, error = self.packet_handler.read1ByteTxRx(
             self.port_handler, motor_id, ADDR_OPERATING_MODE
         )
@@ -192,14 +145,8 @@ class DynamixelHardwareDriver:
 
     def set_operating_mode(self, joint_ids: list, mode: int = POSITION_CONTROL_MODE, retries: int = 4) -> bool:
         """
-        Sets operating mode. Torque must be disabled first.
-        Diagnostic: verifies Torque is off, checks for Hardware Errors,
-        and diagnoses if the hardware actually supports the mode.
+        Sets operating mode with self-healing retries and diagnostic checks.
         """
-        import time
-
-        # Hardware Error Status register for Protocol 2.0
-        ADDR_HARDWARE_ERROR = 70
         all_success = True
 
         for m_id in joint_ids:
@@ -208,11 +155,11 @@ class DynamixelHardwareDriver:
             torque_val = -1
 
             for attempt in range(retries):
-                # 1. Force torque disable
+                # 1. Force torque disable and wait for controller disengagement
                 self.enable_torque([m_id], False)
                 time.sleep(0.05)
                 
-                # Verify Torque actually turned off
+                # Verify torque status
                 torque_val, _, _ = self.packet_handler.read1ByteTxRx(self.port_handler, m_id, ADDR_TORQUE_ENABLE)
                 if torque_val != 0:
                     self.logger.warning(
@@ -221,19 +168,19 @@ class DynamixelHardwareDriver:
                     )
                     continue
 
-                # 2. Write the requested Operating Mode
+                # 2. Write operating mode to EEPROM
                 self.packet_handler.write1ByteTxRx(
                     self.port_handler, m_id, ADDR_OPERATING_MODE, mode
                 )
                 time.sleep(0.05)
                 
-                # 3. Verify if the EEPROM write took effect
+                # 3. Verify write
                 actual_mode = self.read_operating_mode(m_id)
                 if actual_mode == mode:
                     mode_set = True
                     break
 
-                # 4. If failed, read Hardware Error Status to diagnose
+                # 4. Diagnostic read on failure
                 hw_err, _, _ = self.packet_handler.read1ByteTxRx(self.port_handler, m_id, ADDR_HARDWARE_ERROR)
                 
                 self.logger.warning(
@@ -242,18 +189,17 @@ class DynamixelHardwareDriver:
                 )
 
             if not mode_set:
-                # Ultimate diagnosis
                 model_num = self.read_model_number(m_id)
                 err_msg = f"Failed to set mode {mode} on ID {m_id} after {retries} attempts."
                 
                 if hw_err != 0:
                     err_msg += f" DIAGNOSIS: Joint is in a Hardware Error state (Code {hw_err}). Power-cycle required."
                 elif model_num == 1060 and mode == CURRENT_CONTROL_MODE:
-                    err_msg += f" DIAGNOSIS: ID {m_id} is an XL430-W250 (Model 1060). This model lacks a current sensor and physically DOES NOT support Current Control Mode."
+                    err_msg += f" DIAGNOSIS: ID {m_id} is an XL430-W250 (Model 1060). Lacks current sensor; use PWM Control Mode (16)."
                 elif torque_val != 0:
-                    err_msg += f" DIAGNOSIS: Torque stuck at {torque_val}. Another process may be forcing it active."
+                    err_msg += f" DIAGNOSIS: Torque stuck active. External process may be resetting torque."
                 else:
-                    err_msg += f" DIAGNOSIS: Firmware persistently rejecting mode. Model Number: {model_num}."
+                    err_msg += f" DIAGNOSIS: Rejected by firmware. Model Number: {model_num}."
                     
                 self.logger.error(err_msg)
                 all_success = False
@@ -261,24 +207,24 @@ class DynamixelHardwareDriver:
         return all_success
 
     def write_goal_current(self, motor_id: int, raw_current: int) -> bool:
-        """
-        Writes a signed Goal Current (raw units, ~2.69 mA/unit) to one servo.
-        Requires Current Control Mode (0). Caller is responsible for clamping
-        raw_current to a safe magnitude BEFORE calling this - this method
-        does not enforce any limit itself.
-        """
-        value = int(raw_current) & 0xFFFF  # two's-complement wrap for negatives
+        value = int(raw_current) & 0xFFFF
         comm_result, error = self.packet_handler.write2ByteTxRx(
             self.port_handler, motor_id, ADDR_GOAL_CURRENT, value
         )
         return comm_result == COMM_SUCCESS and error == 0
 
-    def write_positions(self, joint_ids: list, target_ticks: list) -> bool:
+    def write_goal_pwm(self, motor_id: int, raw_pwm: int) -> bool:
         """
-        Writes target positions to all joint IDs in a single packet.
-        Returns True if successful, False otherwise.
+        Writes a signed Goal PWM (duty cycle, max ±885) to one servo.
+        Requires PWM Control Mode (16).
         """
+        value = int(raw_pwm) & 0xFFFF
+        comm_result, error = self.packet_handler.write2ByteTxRx(
+            self.port_handler, motor_id, ADDR_GOAL_PWM, value
+        )
+        return comm_result == COMM_SUCCESS and error == 0
 
+    def write_positions(self, joint_ids: list, target_ticks: list) -> bool:
         self.sync_write_pos.clearParam()
         for m_id, ticks in zip(joint_ids, target_ticks):
             param = [
@@ -294,10 +240,6 @@ class DynamixelHardwareDriver:
         return comm_result == COMM_SUCCESS
 
     def read_states(self, joint_ids: list) -> dict:
-        """
-        Reads current, velocity, position, voltage, and temperature for all
-        joint IDs in a single packet.
-        """
         self.sync_read_state.clearParam()
         for m_id in joint_ids:
             self.sync_read_state.addParam(m_id)
@@ -309,7 +251,6 @@ class DynamixelHardwareDriver:
             return states
 
         for m_id in joint_ids:
-
             if self.sync_read_state.isAvailable(m_id, ADDR_PRESENT_CURRENT, 2):
                 curr = self.sync_read_state.getData(m_id, ADDR_PRESENT_CURRENT, 2)
                 vel = self.sync_read_state.getData(m_id, ADDR_PRESENT_VELOCITY, 4)

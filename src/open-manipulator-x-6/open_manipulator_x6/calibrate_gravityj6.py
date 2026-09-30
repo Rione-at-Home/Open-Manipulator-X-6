@@ -47,6 +47,11 @@ def read_all_positions(driver: DynamixelHardwareDriver, joint_ids: list) -> dict
     states = driver.read_states(joint_ids)
     return {jid: ticks_to_rad(states[jid]["position"]) for jid in joint_ids if jid in states}
 
+def to_signed_int16(val: float) -> float:
+    v = int(round(val))
+    if v >= 32768:
+        return float(v - 65536)
+    return float(v)
 
 def hold_and_sample(
     driver: DynamixelHardwareDriver,
@@ -81,7 +86,7 @@ def hold_and_sample(
         if moving_id in states:
             st = states[moving_id]
             positions.append(ticks_to_rad(st["position"]))
-            raw_cur = st.get("current", 0)
+            raw_cur = to_signed_int16(st.get("current", 0))
             raw_currents.append(raw_cur)
             efforts.append(raw_current_to_effort(raw_cur))
 

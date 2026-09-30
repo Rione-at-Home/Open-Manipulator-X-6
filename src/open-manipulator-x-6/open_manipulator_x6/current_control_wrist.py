@@ -123,6 +123,20 @@ def connect_and_prepare(port, baudrate, joint_ids, moving_id):
     if other_ids:
         driver.set_operating_mode(other_ids, mode=POSITION_CONTROL_MODE)
 
+    # VERIFY the mode switch actually took - set_operating_mode() doesn't
+    # check its own writes, so this is the only way to catch a silent
+    # rejection (e.g. torque wasn't fully off yet) before we start driving
+    # Goal Current into a joint that's still ignoring it.
+    actual_mode = driver.read_operating_mode(moving_id)
+    if actual_mode != CURRENT_CONTROL_MODE:
+        raise RuntimeError(
+            f"Joint {moving_id} did NOT switch into Current Control Mode "
+            f"(read back mode={actual_mode}, expected {CURRENT_CONTROL_MODE}). "
+            f"It is likely still in its previous mode and will ignore Goal "
+            f"Current writes. Power-cycle the servo or retry - do not proceed."
+        )
+    print(f"Confirmed joint {moving_id} is in Current Control Mode (readback={actual_mode}).")
+
     # Safety: force a known-zero current command before torque goes live.
     driver.write_goal_current(moving_id, 0)
 

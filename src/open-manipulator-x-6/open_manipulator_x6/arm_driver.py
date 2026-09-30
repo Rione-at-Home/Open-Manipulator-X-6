@@ -23,7 +23,7 @@ class ArmDriver(Node):
         super().__init__("arm_driver")
 
         # Parameters
-        self.declare_parameter("port", "/dev/ttyACM0") # Check the actual port name on your system
+        self.declare_parameter("port", "/dev/ttyUSB0") # Check the actual port name on your system
         self.declare_parameter("baudrate", 1000000)  # 1 Mbps . Check the actual baudrate for your Dynamixel motors
 
         # NOTE: gripper ID (6) is a placeholder — swap in the real ID once you

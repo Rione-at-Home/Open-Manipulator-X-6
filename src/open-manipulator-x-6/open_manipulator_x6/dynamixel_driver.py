@@ -15,6 +15,7 @@ ADDR_TORQUE_ENABLE = 64
 ADDR_POSITION_D_GAIN = 80
 ADDR_POSITION_I_GAIN = 82
 ADDR_POSITION_P_GAIN = 84
+ADDR_GOAL_CURRENT = 102
 ADDR_GOAL_POSITION = 116
 ADDR_PRESENT_CURRENT = 126
 ADDR_PRESENT_VELOCITY = 128
@@ -24,12 +25,14 @@ ADDR_PRESENT_TEMPERATURE = 146
 
 LEN_MODEL_NUMBER = 2
 LEN_GOAL_POSITION = 4
+LEN_GOAL_CURRENT = 2
 LEN_GAIN = 2
 # Current(2B) + Velocity(4B) + Position(4B) + Vel Trajectory(4B) + Pos Trajectory(4B)
 # + Input Voltage(2B) + Temperature(1B) = 21B, read in one contiguous block (126-146)
 LEN_PRESENT_STATE = 21
 
 POSITION_CONTROL_MODE = 3
+CURRENT_CONTROL_MODE = 0
 PROTOCOL_VERSION = 2.0
 
 # NOT pre-filled: I could not independently verify the raw Model Number
@@ -183,6 +186,19 @@ class DynamixelHardwareDriver:
             self.packet_handler.write1ByteTxRx(
                 self.port_handler, m_id, ADDR_OPERATING_MODE, mode
             )
+
+    def write_goal_current(self, motor_id: int, raw_current: int) -> bool:
+        """
+        Writes a signed Goal Current (raw units, ~2.69 mA/unit) to one servo.
+        Requires Current Control Mode (0). Caller is responsible for clamping
+        raw_current to a safe magnitude BEFORE calling this - this method
+        does not enforce any limit itself.
+        """
+        value = int(raw_current) & 0xFFFF  # two's-complement wrap for negatives
+        comm_result, error = self.packet_handler.write2ByteTxRx(
+            self.port_handler, motor_id, ADDR_GOAL_CURRENT, value
+        )
+        return comm_result == COMM_SUCCESS and error == 0
 
     def write_positions(self, joint_ids: list, target_ticks: list) -> bool:
         """

@@ -9,6 +9,7 @@ in PWM Control Mode (Operating Mode 16) and implements software position loop co
     PWM_cmd = Kp*e + Ki*integral(e) + Kd*de/dt   (feedback)
             + PWM_gravity(theta)                  (from fit model)
             + PWM_friction * tanh(e / eps)        (Coulomb compensation)
+            + dir_bias                            (directional/hysteresis feedforward, optional)
 
 *** SAFETY ***
 PWM Control Mode is NOT fail-safe like Position Control - if this script stops
@@ -17,9 +18,33 @@ updating, the last-written voltage duty cycle continues being applied. This scri
   - aborts and zeroes PWM after --max-comm-failures consecutive failed reads
   - hard-clamps every commanded PWM to --max-pwm-raw before writing
 
+*** DIAGNOSTIC ADDITIONS (2026-10-01) ***
+Added to directly answer the "is the integral clamp starving the correction,
+or is there a genuine uncaptured bias?" question instead of inferring it from
+position error alone:
+  - Every sample now logs the running integral value (per-segment CSVs).
+  - Each segment reports whether the integral was pinned at +/-integral_max
+    at the moment the loop ended ("[INTEGRAL SATURATED]" in the console and
+    an integral_saturated column in the summary CSV). If a residual persists
+    but the integral is NOT saturated, raising --integral-max will not help -
+    the bias is not clamp-limited.
+  - New --dir-bias: a fixed additive feedforward term (raw PWM units),
+    applied only on segments stepping in the positive direction (i.e. where
+    target_rad > 0 relative to the trial's step sign). This is meant to be
+    filled in from calibrate_gravityj6.py's forward/reverse split-fit delta
+    once you've measured it, so the directional (cable-tension/hysteresis)
+    bias is compensated proactively by feedforward instead of being fought
+    reactively by the integral term every single step.
+
 Usage:
     python3 current_control_wrist.py --moving-id 6 --step-rad 0.02 --trials 6 --alternate \
-        --gravity-model ./gravity_calib_out/gravity_model.json --friction-comp 35
+        --gravity-model ./gravity_calib_out/gravity_model.json --friction-comp 35 \
+        --integral-max 500
+
+    # once a directional bias has been measured (see calibrate_gravityj6.py):
+    python3 current_control_wrist.py --moving-id 6 --step-rad 0.02 --trials 6 --alternate \
+        --gravity-model ./gravity_calib_out/gravity_model.json --friction-comp 35 \
+        --integral-max 150 --dir-bias 22.5
 """
 
 import argparse
@@ -50,6 +75,7 @@ class Sample:
     t: float
     pos: float
     error: float
+    integral: float
     u_fb: float
     i_grav: float
     i_fric: float
@@ -65,6 +91,8 @@ class SegmentResult:
     settle_time_s: Optional[float]
     final_error_rad: float
     achieved_rate_hz: float
+    final_integral: float
+    integral_saturated: bool
     samples: list = field(default_factory=list)
 
 
@@ -155,6 +183,7 @@ def run_segment(
     dwell_samples: int,
     timeout_s: float,
     max_comm_failures: int,
+    extra_bias: float = 0.0,
 ) -> SegmentResult:
     samples = []
     integral = 0.0
@@ -200,12 +229,12 @@ def run_segment(
         i_grav = grav_model["A"] * math.cos(pos) + grav_model["B"] * math.sin(pos) + grav_model["C"]
         i_fric = friction_comp * math.tanh(error / max(friction_eps_rad, 1e-6))
 
-        u_total = u_fb + i_grav + i_fric
+        u_total = u_fb + i_grav + i_fric + extra_bias
         u_total_clamped = max(-max_pwm_raw, min(max_pwm_raw, u_total))
 
         driver.write_goal_pwm(moving_id, int(round(u_total_clamped)))
 
-        samples.append(Sample(now, pos, error, u_fb, i_grav, i_fric, u_total_clamped, measured_current))
+        samples.append(Sample(now, pos, error, integral, u_fb, i_grav, i_fric, u_total_clamped, measured_current))
 
         if abs(error) <= band_rad:
             consecutive_ok += 1
@@ -225,8 +254,16 @@ def run_segment(
 
     final_error = samples[-1].error if samples else float("nan")
     achieved_rate_hz = n_reads / max(samples[-1].t, 1e-6) if samples else 0.0
+    final_integral = integral
+    # Treat "saturated" as sitting at (or having been clamped to) the ceiling,
+    # not just numerically equal to it, since float accumulation may land a
+    # hair under integral_max after the clamp on the last update.
+    integral_saturated = integral_max > 0 and abs(final_integral) >= (integral_max - 1e-6)
 
-    return SegmentResult(label, target_rad, band_rad, settle_time, final_error, achieved_rate_hz, samples)
+    return SegmentResult(
+        label, target_rad, band_rad, settle_time, final_error, achieved_rate_hz,
+        final_integral, integral_saturated, samples,
+    )
 
 
 def measure_quiescent_noise(
@@ -255,9 +292,9 @@ def write_segment_csv(result: SegmentResult, idx: int, out_dir: Path):
     path = out_dir / f"segment_{idx:02d}_{result.label}_target{result.target_rad:+.3f}.csv"
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["t", "pos", "error", "u_fb", "i_grav", "i_fric", "u_total", "measured_current"])
+        writer.writerow(["t", "pos", "error", "integral", "u_fb", "i_grav", "i_fric", "u_total", "measured_current"])
         for s in result.samples:
-            writer.writerow([f"{s.t:.5f}", f"{s.pos:.5f}", f"{s.error:.5f}",
+            writer.writerow([f"{s.t:.5f}", f"{s.pos:.5f}", f"{s.error:.5f}", f"{s.integral:.3f}",
                               f"{s.u_fb:.3f}", f"{s.i_grav:.3f}", f"{s.i_fric:.3f}",
                               f"{s.u_total:.3f}", f"{s.measured_current:.4f}"])
 
@@ -267,12 +304,14 @@ def write_summary_csv(results: list, out_dir: Path):
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["idx", "label", "target_rad", "band_rad", "settle_time_s",
-                          "final_error_rad", "final_error_ticks", "achieved_rate_hz"])
+                          "final_error_rad", "final_error_ticks", "achieved_rate_hz",
+                          "final_integral", "integral_saturated"])
         for i, r in enumerate(results):
             writer.writerow([i, r.label, f"{r.target_rad:.4f}", f"{r.band_rad:.5f}",
                               "" if r.settle_time_s is None else f"{r.settle_time_s:.4f}",
                               f"{r.final_error_rad:.5f}", f"{r.final_error_rad/RAD_PER_TICK:.2f}",
-                              f"{r.achieved_rate_hz:.1f}"])
+                              f"{r.achieved_rate_hz:.1f}",
+                              f"{r.final_integral:.2f}", r.integral_saturated])
 
 
 def main():
@@ -290,6 +329,13 @@ def main():
     ap.add_argument("--friction-comp", type=float, default=35.0,
                      help="Coulomb friction feedforward magnitude, raw PWM units.")
     ap.add_argument("--friction-eps-rad", type=float, default=0.003)
+    ap.add_argument("--dir-bias", type=float, default=0.0,
+                     help="Fixed additive feedforward PWM bias applied only on positive-direction "
+                          "step segments (target_rad relative step > 0). Intended to compensate a "
+                          "known, repeatable directional bias (e.g. cable-tension hysteresis) "
+                          "proactively instead of relying on the integral term to fight it every "
+                          "step. Source this value from calibrate_gravityj6.py's forward/reverse "
+                          "split-fit delta-at-theta0 output. Leave at 0.0 until you've measured it.")
 
     ap.add_argument("--kp", type=float, default=80.0)
     ap.add_argument("--ki", type=float, default=5.0)
@@ -320,7 +366,10 @@ def main():
     print(f"Loaded gravity model: I_ff(theta) = {grav_model['A']:+.3f}*cos(theta) "
           f"+ {grav_model['B']:+.3f}*sin(theta) + {grav_model['C']:+.3f}")
     print(f"Friction feedforward magnitude: {args.friction_comp:.1f} PWM units "
-          f"(blend width {args.friction_eps_rad*1000:.1f} mrad)\n")
+          f"(blend width {args.friction_eps_rad*1000:.1f} mrad)")
+    if args.dir_bias != 0.0:
+        print(f"Directional bias: {args.dir_bias:+.1f} PWM units, applied on positive-direction steps only")
+    print()
 
     driver, other_ids = connect_and_prepare(args.port, args.baudrate, args.joint_ids, args.moving_id)
     results = []
@@ -348,25 +397,30 @@ def main():
         for i in range(args.trials):
             step = args.step_rad if not (args.alternate and i % 2 == 1) else -args.step_rad
             target = args.reference_rad + step
+            extra_bias = args.dir_bias if step > 0 else 0.0
 
             start_pos = ticks_to_rad(driver.read_states([args.moving_id])[args.moving_id]["position"])
             r_return = run_segment(driver, args.moving_id, "return", args.reference_rad,
                                     band_rad=band_rad, dwell_samples=args.dwell_samples,
-                                    timeout_s=args.timeout, **ctrl)
+                                    timeout_s=args.timeout, extra_bias=0.0, **ctrl)
             write_segment_csv(r_return, 2 * i, out_dir)
 
-            print(f"Trial {i}: target {target:+.3f} rad on joint {args.moving_id} ...")
+            print(f"Trial {i}: target {target:+.3f} rad on joint {args.moving_id} "
+                  f"(extra_bias={extra_bias:+.1f}) ...")
             r_step = run_segment(driver, args.moving_id, "step", target,
                                   band_rad=band_rad, dwell_samples=args.dwell_samples,
-                                  timeout_s=args.timeout, **ctrl)
+                                  timeout_s=args.timeout, extra_bias=extra_bias, **ctrl)
             write_segment_csv(r_step, 2 * i + 1, out_dir)
             results.append(r_step)
 
             err_mrad = r_step.final_error_rad * 1000
+            sat_flag = " [INTEGRAL SATURATED]" if r_step.integral_saturated else ""
             if r_step.settle_time_s is None:
-                print(f"  did NOT settle within {args.timeout}s (final error {err_mrad:+.2f} mrad)")
+                print(f"  did NOT settle within {args.timeout}s (final error {err_mrad:+.2f} mrad, "
+                      f"final integral={r_step.final_integral:+.1f}){sat_flag}")
             else:
-                print(f"  settled in {r_step.settle_time_s*1000:.1f} ms (final error {err_mrad:+.2f} mrad)")
+                print(f"  settled in {r_step.settle_time_s*1000:.1f} ms (final error {err_mrad:+.2f} mrad, "
+                      f"final integral={r_step.final_integral:+.1f}){sat_flag}")
 
     except SafetyAbort as e:
         print(f"\n[SAFETY ABORT] {e}")
@@ -378,6 +432,19 @@ def main():
         write_summary_csv(results, out_dir)
         driver.disconnect()
         print(f"\nGoal PWM zeroed and port closed. Outputs in: {out_dir.resolve()}")
+
+    saturated_positive = [r for r in results if r.target_rad > args.reference_rad and r.integral_saturated]
+    if saturated_positive:
+        print(f"\n[NOTE] {len(saturated_positive)}/{len(results)} positive-direction trial(s) ended with "
+              f"the integral pinned at +/-{args.integral_max:.0f}. If a residual remains, raising "
+              f"--integral-max further (or adding --dir-bias) is the next thing to try.")
+    elif any(r.target_rad > args.reference_rad for r in results):
+        pos_trials = [r for r in results if r.target_rad > args.reference_rad]
+        max_pos_err = max(abs(r.final_error_rad) for r in pos_trials) * 1000
+        if max_pos_err > 2.0:
+            print(f"\n[NOTE] Positive-direction trials did NOT saturate the integral, but still show "
+                  f"up to {max_pos_err:.2f} mrad residual. Raising --integral-max will not fix this - "
+                  f"it points to an uncaptured bias in the feedforward model (see --dir-bias).")
 
 
 if __name__ == "__main__":

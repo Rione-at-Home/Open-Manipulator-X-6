@@ -313,7 +313,7 @@ def main():
     # arguments
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--port", default="/dev/ttyACM0")
+    ap.add_argument("--port", default="/dev/ttyUSB0")
     ap.add_argument("--baudrate", type=int, default=1_000_000)
     ap.add_argument("--joint-ids", type=int, nargs="+", default=[1, 2, 3, 4, 5, 6, 7],
                      help="All joints to hold/monitor (default matches arm_driver.py).")

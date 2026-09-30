@@ -16,12 +16,10 @@ static-noise calibration pass (band = noise_k * sigma_position), instead
 of an arbitrary fraction of the step size, so "did not settle" reflects a
 real physical issue rather than an unrealistically tight tolerance.
 
-Place this file in the same directory as dynamixel_driver.py and utils.py
-(or adjust the imports below to match your package layout).
 
 Usage:
-    python3 settling_time_test.py --moving-id 6 --step-rad 0.3 --trials 5
-    python3 settling_time_test.py --moving-id 6 --step-rad 0.3 --trials 6 --alternate
+    python3 settling_time_test.py --moving-id 1 --step-rad 0.3 --trials 5
+    python3 settling_time_test.py --moving-id 1 --step-rad 0.3 --trials 6 --alternate
 """
 
 import argparse
@@ -38,6 +36,7 @@ from utils import (
     ticks_to_rad,
     raw_current_to_effort,
     raw_vel_to_rad_s,
+    RAD_PER_TICK,
 )
 
 
@@ -187,11 +186,11 @@ def measure_quiescent_noise(
 
     if len(readings) < 2:
         print("  [WARNING] too few readings for noise calibration - defaulting sigma to 1 tick.")
-        return 0.00153  # ~1 tick in rad, conservative fallback
+        return RAD_PER_TICK  # ~1 tick in rad, conservative fallback
 
     sigma = statistics.pstdev(readings)
     print(f"  sigma_position = {sigma*1000:.3f} mrad over {len(readings)} samples "
-          f"(~{sigma/0.00153:.1f} ticks)")
+          f"(~{sigma/RAD_PER_TICK:.1f} ticks)")
     return sigma
 
 
@@ -299,7 +298,7 @@ def write_summary_csv(results: list, out_dir: Path):
              "achieved_rate_hz", "clamped"]
         )
         for r in results:
-            err_ticks = "" if r.final_error_rad != r.final_error_rad else f"{r.final_error_rad/0.00153:.2f}"
+            err_ticks = "" if r.final_error_rad != r.final_error_rad else f"{r.final_error_rad/RAD_PER_TICK:.2f}"
             writer.writerow(
                 [r.trial_idx, r.moving_id, f"{r.step_rad:.4f}", f"{r.start_rad:.4f}",
                  f"{r.target_rad:.4f}", f"{r.band_rad:.5f}",
@@ -310,12 +309,10 @@ def write_summary_csv(results: list, out_dir: Path):
 
 
 def main():
-    # arguments
-
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--port", default="/dev/ttyUSB0")
+    ap.add_argument("--port", default="/dev/ttyACM0")
     ap.add_argument("--baudrate", type=int, default=1_000_000)
-    ap.add_argument("--joint-ids", type=int, nargs="+", default=[1, 2, 3, 4, 5, 6, 7],
+    ap.add_argument("--joint-ids", type=int, nargs="+", default=[11, 12, 13, 14, 15, 2, 6],
                      help="All joints to hold/monitor (default matches arm_driver.py).")
     ap.add_argument("--moving-id", type=int, required=True,
                      help="Which joint ID to step.")
@@ -333,6 +330,12 @@ def main():
     ap.add_argument("--band-frac-floor", type=float, default=0.0,
                      help="Optional minimum band as a fraction of step size, in case noise-based "
                           "band comes out unrealistically tight for your application.")
+    ap.add_argument("--min-band-ticks", type=float, default=2.0,
+                     help="Absolute floor on the settling band, in encoder ticks. Guards against "
+                          "sigma_position measuring as exactly (or near) zero over a short "
+                          "calibration window - a real possibility given ~1.53 mrad/tick "
+                          "resolution, which would otherwise make the settle criterion "
+                          "unsatisfiable regardless of true settling.")
     ap.add_argument("--dwell-samples", type=int, default=10,
                      help="Consecutive in-band samples required to declare settled.")
     ap.add_argument("--timeout", type=float, default=3.0, help="Per-trial timeout, seconds.")
@@ -360,9 +363,13 @@ def main():
         sigma = measure_quiescent_noise(
             driver, args.joint_ids, args.moving_id, args.reference_rad, args.noise_calib_duration
         )
-        band_rad = max(args.noise_k * sigma, args.band_frac_floor * abs(args.step_rad))
+        band_rad = max(
+            args.noise_k * sigma,
+            args.band_frac_floor * abs(args.step_rad),
+            args.min_band_ticks * RAD_PER_TICK,
+        )
         print(f"Using settling band = {band_rad*1000:.3f} mrad "
-              f"(~{band_rad/0.00153:.1f} ticks) for all trials.\n")
+              f"(~{band_rad/RAD_PER_TICK:.1f} ticks) for all trials.\n")
 
         for i in range(args.trials):
             step = args.step_rad

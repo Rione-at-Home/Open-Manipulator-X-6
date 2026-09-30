@@ -23,12 +23,12 @@ class ArmDriver(Node):
         super().__init__("arm_driver")
 
         # Parameters
-        self.declare_parameter("port", "/dev/ttyACM0") # Check the actual port name on your system
+        self.declare_parameter("port", "/dev/ttyUSB0") # Check the actual port name on your system
         self.declare_parameter("baudrate", 1000000)  # 1 Mbps . Check the actual baudrate for your Dynamixel motors
 
         # NOTE: gripper ID (6) is a placeholder — swap in the real ID once you
-        # finish renumbering (you mentioned landing on 1 and 6 eventually).
-        self.declare_parameter("joint_ids", [11, 12, 13, 14, 15, 2, 6])
+        # finish renumbering (you mentioned landing on 1 and 7 eventually).
+        self.declare_parameter("joint_ids", [1, 2, 3, 4, 5, 6, 7])
 
         self.declare_parameter(
             "joint_names",

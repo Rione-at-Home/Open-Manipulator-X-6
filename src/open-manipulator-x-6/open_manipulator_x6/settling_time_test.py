@@ -16,6 +16,8 @@ static-noise calibration pass (band = noise_k * sigma_position), instead
 of an arbitrary fraction of the step size, so "did not settle" reflects a
 real physical issue rather than an unrealistically tight tolerance.
 
+Place this file in the same directory as dynamixel_driver.py and utils.py
+(or adjust the imports below to match your package layout).
 
 Usage:
     python3 settling_time_test.py --moving-id 1 --step-rad 0.3 --trials 5
@@ -345,6 +347,12 @@ def main():
                      help="Safety margin multiplier for the recommended N calculation.")
     ap.add_argument("--control-rate-hz", type=float, default=100.0,
                      help="Sample rate the recommended N should be computed against.")
+    ap.add_argument("--set-p", type=int, default=None,
+                     help="If given, writes this Position P Gain to --moving-id before testing.")
+    ap.add_argument("--set-i", type=int, default=None,
+                     help="If given, writes this Position I Gain to --moving-id before testing.")
+    ap.add_argument("--set-d", type=int, default=None,
+                     help="If given, writes this Position D Gain to --moving-id before testing.")
     ap.add_argument("--out-dir", default="./settling_test_out")
     args = ap.parse_args()
 
@@ -360,6 +368,28 @@ def main():
     results = []
 
     try:
+        gains_before = driver.read_position_gains(args.moving_id)
+        print(f"Position gains on joint {args.moving_id} before any change: {gains_before}")
+
+        if args.set_p is not None or args.set_i is not None or args.set_d is not None:
+            ok = driver.set_position_gains(args.moving_id, p=args.set_p, i=args.set_i, d=args.set_d)
+            gains_after = driver.read_position_gains(args.moving_id)
+            print(f"Wrote gains (p={args.set_p}, i={args.set_i}, d={args.set_d}) -> "
+                  f"success={ok}, read back as {gains_after}")
+            if gains_after is not None:
+                for name, requested in (("p", args.set_p), ("i", args.set_i), ("d", args.set_d)):
+                    if requested is not None and gains_after.get(name) != requested:
+                        print(f"  [WARNING] requested {name}={requested} but read back "
+                              f"{gains_after.get(name)} - write may not have taken effect.")
+
+        with open(out_dir / "run_config.txt", "w") as f:
+            f.write(f"moving_id={args.moving_id}\n")
+            f.write(f"reference_rad={args.reference_rad}\n")
+            f.write(f"step_rad={args.step_rad}\n")
+            f.write(f"gains_before={gains_before}\n")
+            f.write(f"requested_gains=p={args.set_p} i={args.set_i} d={args.set_d}\n")
+            f.write(f"gains_after={driver.read_position_gains(args.moving_id)}\n")
+
         sigma = measure_quiescent_noise(
             driver, args.joint_ids, args.moving_id, args.reference_rad, args.noise_calib_duration
         )

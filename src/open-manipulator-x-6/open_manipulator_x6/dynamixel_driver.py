@@ -190,17 +190,52 @@ class DynamixelHardwareDriver:
             return None
         return value
 
-    def set_operating_mode(self, joint_ids: list, mode: int = POSITION_CONTROL_MODE):
+    def set_operating_mode(self, joint_ids: list, mode: int = POSITION_CONTROL_MODE, retries: int = 3) -> bool:
         """
-        Sets operating mode (Torque must be disabled first).
+        Sets operating mode. Torque must be disabled first.
+        Self-healing: applies a delay and verifies the EEPROM write, retrying
+        if the firmware silently rejected it due to back-to-back commands.
         """
+        import time
 
+        # Disable torque for all requested joints
         self.enable_torque(joint_ids, False)
 
+        # Pause to let the motor controllers fully disengage torque
+        # before we attempt an EEPROM write.
+        time.sleep(0.05)
+
+        all_success = True
+
         for m_id in joint_ids:
-            self.packet_handler.write1ByteTxRx(
-                self.port_handler, m_id, ADDR_OPERATING_MODE, mode
-            )
+            mode_set = False
+            for attempt in range(retries):
+                # Write the requested mode
+                self.packet_handler.write1ByteTxRx(
+                    self.port_handler, m_id, ADDR_OPERATING_MODE, mode
+                )
+
+                # Verify if the EEPROM write took effect
+                actual_mode = self.read_operating_mode(m_id)
+                if actual_mode == mode:
+                    mode_set = True
+                    break
+
+                # If failed, log the silent rejection and pause longer before retrying
+                self.logger.warning(
+                    f"Mode write rejected for ID {m_id} (readback {actual_mode}, expected {mode}). "
+                    f"Retrying ({attempt + 1}/{retries})..."
+                )
+                
+                # Re-assert torque disable just in case, then wait again
+                self.enable_torque([m_id], False)
+                time.sleep(0.05)
+
+            if not mode_set:
+                self.logger.error(f"Failed to set mode {mode} on ID {m_id} after {retries} attempts.")
+                all_success = False
+
+        return all_success
 
     def write_goal_current(self, motor_id: int, raw_current: int) -> bool:
         """

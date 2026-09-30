@@ -9,8 +9,12 @@ from dynamixel_sdk import (
 )
 
 # Control Table Addresses (XM430 Series / Protocol 2.0)
+ADDR_MODEL_NUMBER = 0
 ADDR_OPERATING_MODE = 11
 ADDR_TORQUE_ENABLE = 64
+ADDR_POSITION_D_GAIN = 80
+ADDR_POSITION_I_GAIN = 82
+ADDR_POSITION_P_GAIN = 84
 ADDR_GOAL_POSITION = 116
 ADDR_PRESENT_CURRENT = 126
 ADDR_PRESENT_VELOCITY = 128
@@ -18,13 +22,25 @@ ADDR_PRESENT_POSITION = 132
 ADDR_PRESENT_VOLTAGE = 144
 ADDR_PRESENT_TEMPERATURE = 146
 
+LEN_MODEL_NUMBER = 2
 LEN_GOAL_POSITION = 4
+LEN_GAIN = 2
 # Current(2B) + Velocity(4B) + Position(4B) + Vel Trajectory(4B) + Pos Trajectory(4B)
 # + Input Voltage(2B) + Temperature(1B) = 21B, read in one contiguous block (126-146)
 LEN_PRESENT_STATE = 21
 
 POSITION_CONTROL_MODE = 3
 PROTOCOL_VERSION = 2.0
+
+# NOT pre-filled: I could not independently verify the raw Model Number
+# register values for XM430-W210 vs W350 against an authoritative source.
+# Read them once with read_model_number() on a known-W210 and a known-W350
+# joint (cross-check against Dynamixel Wizard's Model Information panel),
+# then fill this dict in yourself so later joins are labeled automatically.
+KNOWN_MODEL_NUMBERS = {
+    # 1234: "XM430-W350",  # fill in after confirming via Wizard
+    # 5678: "XM430-W210",
+}
 
 
 class DynamixelHardwareDriver:
@@ -80,6 +96,63 @@ class DynamixelHardwareDriver:
 
         model_num, comm_result, error = self.packet_handler.ping(self.port_handler, motor_id)
         return comm_result == COMM_SUCCESS and error == 0
+
+    def read_model_number(self, motor_id: int) -> int | None:
+        """
+        Reads the raw Model Number register. Use this to confirm which
+        servos are XM430-W210 vs XM430-W350 (or any other variant) rather
+        than assuming from wiring/origin alone - see KNOWN_MODEL_NUMBERS
+        for a best-effort (unverified) label lookup.
+        """
+        value, comm_result, error = self.packet_handler.read2ByteTxRx(
+            self.port_handler, motor_id, ADDR_MODEL_NUMBER
+        )
+        if comm_result != COMM_SUCCESS or error != 0:
+            return None
+        return value
+
+    def read_position_gains(self, motor_id: int) -> dict | None:
+        """
+        Reads Position P/I/D Gain for one servo. Returns None on comm failure.
+        """
+        gains = {}
+        for name, addr in (("p", ADDR_POSITION_P_GAIN),
+                            ("i", ADDR_POSITION_I_GAIN),
+                            ("d", ADDR_POSITION_D_GAIN)):
+            value, comm_result, error = self.packet_handler.read2ByteTxRx(
+                self.port_handler, motor_id, addr
+            )
+            if comm_result != COMM_SUCCESS or error != 0:
+                return None
+            gains[name] = value
+        return gains
+
+    def write_position_gain(self, motor_id: int, addr: int, value: int) -> bool:
+        """
+        Writes a single Position PID gain register. These are RAM-area
+        registers on the X-series (unlike Operating Mode), so torque does
+        NOT need to be disabled first.
+        """
+        comm_result, error = self.packet_handler.write2ByteTxRx(
+            self.port_handler, motor_id, addr, value
+        )
+        return comm_result == COMM_SUCCESS and error == 0
+
+    def set_position_gains(
+        self, motor_id: int, p: int | None = None, i: int | None = None, d: int | None = None
+    ) -> bool:
+        """
+        Writes any subset of Position P/I/D gains for one servo.
+        Pass only the terms you want to change; others are left untouched.
+        """
+        success = True
+        if p is not None:
+            success &= self.write_position_gain(motor_id, ADDR_POSITION_P_GAIN, p)
+        if i is not None:
+            success &= self.write_position_gain(motor_id, ADDR_POSITION_I_GAIN, i)
+        if d is not None:
+            success &= self.write_position_gain(motor_id, ADDR_POSITION_D_GAIN, d)
+        return success
 
     def enable_torque(self, joint_ids: list, enable: bool) -> bool:
         """

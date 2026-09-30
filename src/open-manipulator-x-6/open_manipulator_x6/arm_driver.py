@@ -1,244 +1,284 @@
-import logging
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool, Empty, String
+from std_srvs.srv import SetBool, Trigger
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 
-from dynamixel_sdk import (
-    COMM_SUCCESS,
-    GroupSyncRead,
-    GroupSyncWrite,
-    PacketHandler,
-    PortHandler,
+from .dynamixel_driver import DynamixelHardwareDriver
+from .utils import (
+    rad_s_to_raw_vel,
+    rad_to_ticks,
+    raw_current_to_effort,
+    raw_temperature_to_celsius,
+    raw_vel_to_rad_s,
+    raw_voltage_to_volts,
+    ticks_to_rad,
 )
 
-# Control Table Addresses (XM430 Series / Protocol 2.0)
-ADDR_MODEL_NUMBER = 0
-ADDR_OPERATING_MODE = 11
-ADDR_TORQUE_ENABLE = 64
-ADDR_POSITION_D_GAIN = 80
-ADDR_POSITION_I_GAIN = 82
-ADDR_POSITION_P_GAIN = 84
-ADDR_GOAL_POSITION = 116
-ADDR_PRESENT_CURRENT = 126
-ADDR_PRESENT_VELOCITY = 128
-ADDR_PRESENT_POSITION = 132
-ADDR_PRESENT_VOLTAGE = 144
-ADDR_PRESENT_TEMPERATURE = 146
 
-LEN_MODEL_NUMBER = 2
-LEN_GOAL_POSITION = 4
-LEN_GAIN = 2
-# Current(2B) + Velocity(4B) + Position(4B) + Vel Trajectory(4B) + Pos Trajectory(4B)
-# + Input Voltage(2B) + Temperature(1B) = 21B, read in one contiguous block (126-146)
-LEN_PRESENT_STATE = 21
+class ArmDriver(Node):
 
-POSITION_CONTROL_MODE = 3
-PROTOCOL_VERSION = 2.0
+    def __init__(self):
+        super().__init__("arm_driver")
 
-# NOT pre-filled: I could not independently verify the raw Model Number
-# register values for XM430-W210 vs W350 against an authoritative source.
-# Read them once with read_model_number() on a known-W210 and a known-W350
-# joint (cross-check against Dynamixel Wizard's Model Information panel),
-# then fill this dict in yourself so later joins are labeled automatically.
-KNOWN_MODEL_NUMBERS = {
-    # 1234: "XM430-W350",  # fill in after confirming via Wizard
-    # 5678: "XM430-W210",
-}
+        # Parameters
+        self.declare_parameter("port", "/dev/ttyACM0") # Check the actual port name on your system
+        self.declare_parameter("baudrate", 1000000)  # 1 Mbps . Check the actual baudrate for your Dynamixel motors
 
+        # NOTE: gripper ID (6) is a placeholder — swap in the real ID once you
+        # finish renumbering (you mentioned landing on 1 and 7 eventually).
+        self.declare_parameter("joint_ids", [1, 2, 3, 4, 5, 6, 7])
 
-class DynamixelHardwareDriver:
+        self.declare_parameter(
+            "joint_names",
+            ["joint1", "joint2", "joint3", "joint4", "joint5", "wrist_rotate", "gripper"],
 
-    def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = 57600):
-        self.port_name = port
-        self.baudrate = baudrate
-
-        self.port_handler = PortHandler(self.port_name)
-        self.packet_handler = PacketHandler(PROTOCOL_VERSION)
-
-        self.sync_write_pos = GroupSyncWrite(
-            self.port_handler, self.packet_handler, ADDR_GOAL_POSITION, LEN_GOAL_POSITION
         )
-        self.sync_read_state = GroupSyncRead(
-            self.port_handler, self.packet_handler, ADDR_PRESENT_CURRENT, LEN_PRESENT_STATE
-        )
+        self.declare_parameter("home_positions", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-        self.is_connected = False
-        self.logger = logging.getLogger("DynamixelHardwareDriver")
+        # Diagnostic thresholds (deg C) — tune to your servo's Temperature Limit register
+        self.declare_parameter("temperature_warn_c", 70.0)
+        self.declare_parameter("temperature_error_c", 80.0)
 
-    def connect(self) -> bool:
+        self.port = self.get_parameter("port").get_parameter_value().string_value
+        self.baudrate = self.get_parameter("baudrate").get_parameter_value().integer_value
+        self.joint_ids = list(self.get_parameter("joint_ids").get_parameter_value().integer_array_value)
+        self.joint_names = list(self.get_parameter("joint_names").get_parameter_value().string_array_value)
+        self.home_positions = list(self.get_parameter("home_positions").get_parameter_value().double_array_value)
+        self.temp_warn_c = self.get_parameter("temperature_warn_c").get_parameter_value().double_value
+        self.temp_error_c = self.get_parameter("temperature_error_c").get_parameter_value().double_value
+
+        self.joint_map = dict(zip(self.joint_names, self.joint_ids))
+        self.id_to_index = {m_id: idx for idx, m_id in enumerate(self.joint_ids)}
+
+        # Internal State
+        self.is_enabled = False
+        self.status = "INITIALIZING"
+        self.current_positions = [0.0] * len(self.joint_ids)
+
+        # Low-Level Hardware Interface 
+        self.driver = DynamixelHardwareDriver(port=self.port, baudrate=self.baudrate)
+
+        if not self.connect_and_initialize():
+            self.get_logger().error("Hardware initialization failed!")
+            self.status = "ERROR"
+
+        # Publishers & Subscribers 
+        self.joint_pub = self.create_publisher(JointState, "/joint_states", 10)
+        self.status_pub = self.create_publisher(String, "/arm_status", 10)
+        self.diag_pub = self.create_publisher(DiagnosticArray, "/arm_diagnostics", 10)
+
+        self.create_subscription(JointState, "/arm_command", self.arm_command_cb, 10)
+        self.create_subscription(Bool, "/arm_enable", self.arm_enable_cb, 10)
+        self.create_subscription(Empty, "/arm_home", self.arm_home_cb, 10)
+        self.create_subscription(Empty, "/arm_stop", self.arm_stop_cb, 10)
+
+        # Services
+        self.create_service(SetBool, "~/enable_torque", self.enable_torque_srv)
+        self.create_service(Trigger, "~/reboot_motors", self.reboot_motors_srv)
+
+        # --- 50 Hz Update Loop ---
+        self.timer = self.create_timer(0.02, self.update_loop)
+        self.get_logger().info("OpenManipulator-X Arm Driver Ready.")
+
+    def connect_and_initialize(self) -> bool:
         """
-        Method to connect to the Dynamixel hardware. 
+        Method to connect to the Dynamixel hardware and initialize the motors.
         Returns True if successful, False otherwise.
         """
 
-        if not self.port_handler.openPort():
-            self.logger.error(f"Failed to open port: {self.port_name}")
+        if not self.driver.connect():
             return False
 
-        if not self.port_handler.setBaudRate(self.baudrate):
-            self.logger.error(f"Failed to set baudrate: {self.baudrate}")
-            return False
+        # Verify communication with all motors
 
-        self.is_connected = True
-        return True
+        for m_id in self.joint_ids:
 
-    def disconnect(self):
-        """
-        Method to disconnect from the Dynamixel hardware.
-        """
-
-        if self.is_connected:
-            self.port_handler.closePort()
-            self.is_connected = False
-
-    def ping(self, motor_id: int) -> bool:
-        """
-        Method to ping a Dynamixel motor.
-        Returns True if successful, False otherwise.
-        """
-
-        model_num, comm_result, error = self.packet_handler.ping(self.port_handler, motor_id)
-        return comm_result == COMM_SUCCESS and error == 0
-
-    def read_model_number(self, motor_id: int) -> int | None:
-        """
-        Reads the raw Model Number register. Use this to confirm which
-        servos are XM430-W210 vs XM430-W350 (or any other variant) rather
-        than assuming from wiring/origin alone - see KNOWN_MODEL_NUMBERS
-        for a best-effort (unverified) label lookup.
-        """
-        value, comm_result, error = self.packet_handler.read2ByteTxRx(
-            self.port_handler, motor_id, ADDR_MODEL_NUMBER
-        )
-        if comm_result != COMM_SUCCESS or error != 0:
-            return None
-        return value
-
-    def read_position_gains(self, motor_id: int) -> dict | None:
-        """
-        Reads Position P/I/D Gain for one servo. Returns None on comm failure.
-        """
-        gains = {}
-        for name, addr in (("p", ADDR_POSITION_P_GAIN),
-                            ("i", ADDR_POSITION_I_GAIN),
-                            ("d", ADDR_POSITION_D_GAIN)):
-            value, comm_result, error = self.packet_handler.read2ByteTxRx(
-                self.port_handler, motor_id, addr
-            )
-            if comm_result != COMM_SUCCESS or error != 0:
-                return None
-            gains[name] = value
-        return gains
-
-    def write_position_gain(self, motor_id: int, addr: int, value: int) -> bool:
-        """
-        Writes a single Position PID gain register. These are RAM-area
-        registers on the X-series (unlike Operating Mode), so torque does
-        NOT need to be disabled first.
-        """
-        comm_result, error = self.packet_handler.write2ByteTxRx(
-            self.port_handler, motor_id, addr, value
-        )
-        return comm_result == COMM_SUCCESS and error == 0
-
-    def set_position_gains(
-        self, motor_id: int, p: int | None = None, i: int | None = None, d: int | None = None
-    ) -> bool:
-        """
-        Writes any subset of Position P/I/D gains for one servo.
-        Pass only the terms you want to change; others are left untouched.
-        """
-        success = True
-        if p is not None:
-            success &= self.write_position_gain(motor_id, ADDR_POSITION_P_GAIN, p)
-        if i is not None:
-            success &= self.write_position_gain(motor_id, ADDR_POSITION_I_GAIN, i)
-        if d is not None:
-            success &= self.write_position_gain(motor_id, ADDR_POSITION_D_GAIN, d)
-        return success
-
-    def enable_torque(self, joint_ids: list, enable: bool) -> bool:
-        """
-        Method to enable or disable torque for a list of Dynamixel joints.
-        Returns True if successful, False otherwise.
-        """
-
-        value = 1 if enable else 0
-        success = True
-        for m_id in joint_ids:
-            comm_result, error = self.packet_handler.write1ByteTxRx(
-                self.port_handler, m_id, ADDR_TORQUE_ENABLE, value
-            )
-
-            if comm_result != COMM_SUCCESS or error != 0:
-                success = False
-
-        return success
-
-    def set_operating_mode(self, joint_ids: list, mode: int = POSITION_CONTROL_MODE):
-        """
-        Sets operating mode (Torque must be disabled first).
-        """
-
-        self.enable_torque(joint_ids, False)
-
-        for m_id in joint_ids:
-            self.packet_handler.write1ByteTxRx(
-                self.port_handler, m_id, ADDR_OPERATING_MODE, mode
-            )
-
-    def write_positions(self, joint_ids: list, target_ticks: list) -> bool:
-        """
-        Writes target positions to all joint IDs in a single packet.
-        Returns True if successful, False otherwise.
-        """
-
-        self.sync_write_pos.clearParam()
-        for m_id, ticks in zip(joint_ids, target_ticks):
-            param = [
-                (ticks & 0xFF),
-                (ticks >> 8) & 0xFF,
-                (ticks >> 16) & 0xFF,
-                (ticks >> 24) & 0xFF,
-            ]
-            if not self.sync_write_pos.addParam(m_id, bytes(param)):
+            if not self.driver.ping(m_id):
+                
+                self.get_logger().error(f"Failed to ping motor ID: {m_id}")
                 return False
 
-        comm_result = self.sync_write_pos.txPacket()
-        return comm_result == COMM_SUCCESS
+        self.driver.set_operating_mode(self.joint_ids)
+        self.enable_torque(True)
+        self.status = "READY"
+        return True
 
-    def read_states(self, joint_ids: list) -> dict:
-        """
-        Reads current, velocity, position, voltage, and temperature for all
-        joint IDs in a single packet.
-        """
-        self.sync_read_state.clearParam()
-        for m_id in joint_ids:
-            self.sync_read_state.addParam(m_id)
+    def enable_torque(self, enable: bool):
+        if self.driver.enable_torque(self.joint_ids, enable):
+            self.is_enabled = enable
+            self.status = "READY" if enable else "DISABLED"
+            self.get_logger().info(f"Torque {'enabled' if enable else 'disabled'}.")
+        else:
+            self.status = "ERROR"
+            self.get_logger().error("Failed to toggle torque.")
 
-        comm_result = self.sync_read_state.txRxPacket()
-        states = {}
+    # --- Callbacks ---
+    def arm_command_cb(self, msg: JointState):
+        if not self.is_enabled:
+            return
 
-        if comm_result != COMM_SUCCESS:
-            return states
+        target_ticks = list(self.current_positions)  # Fallback to current position if unassigned
+        
+        # Name-based mapping fallback to ordered index array
+        if msg.name:
+            target_dict = dict(zip(msg.name, msg.position))
+            for idx, name in enumerate(self.joint_names):
+                if name in target_dict:
+                    target_ticks[idx] = rad_to_ticks(target_dict[name])
+                else:
+                    target_ticks[idx] = rad_to_ticks(self.current_positions[idx])
+        elif len(msg.position) == len(self.joint_ids):
+            target_ticks = [rad_to_ticks(p) for p in msg.position]
+        else:
+            return
 
-        for m_id in joint_ids:
+        self.driver.write_positions(self.joint_ids, target_ticks)
+        self.status = "MOVING"
 
-            if self.sync_read_state.isAvailable(m_id, ADDR_PRESENT_CURRENT, 2):
-                curr = self.sync_read_state.getData(m_id, ADDR_PRESENT_CURRENT, 2)
-                vel = self.sync_read_state.getData(m_id, ADDR_PRESENT_VELOCITY, 4)
-                pos = self.sync_read_state.getData(m_id, ADDR_PRESENT_POSITION, 4)
-                states[m_id] = {"current": curr, "velocity": vel, "position": pos}
+    def arm_enable_cb(self, msg: Bool):
+        self.enable_torque(msg.data)
 
-                if self.sync_read_state.isAvailable(m_id, ADDR_PRESENT_VOLTAGE, 2):
-                    states[m_id]["voltage"] = self.sync_read_state.getData(
-                        m_id, ADDR_PRESENT_VOLTAGE, 2
-                    )
+    def arm_home_cb(self, _msg: Empty):
+        if not self.is_enabled:
+            return
+        home_ticks = [rad_to_ticks(p) for p in self.home_positions]
+        self.driver.write_positions(self.joint_ids, home_ticks)
+        self.status = "MOVING"
 
-                if self.sync_read_state.isAvailable(m_id, ADDR_PRESENT_TEMPERATURE, 1):
-                    states[m_id]["temperature"] = self.sync_read_state.getData(
-                        m_id, ADDR_PRESENT_TEMPERATURE, 1
-                    )
+    def arm_stop_cb(self, _msg: Empty):
+        # Stop motion by commanding current position
+        if self.is_enabled:
+            stop_ticks = [rad_to_ticks(p) for p in self.current_positions]
+            self.driver.write_positions(self.joint_ids, stop_ticks)
+            self.status = "READY"
 
-        return states
+    def enable_torque_srv(self, request, response):
+        self.enable_torque(request.data)
+        response.success = True
+        response.message = f"Torque set to {request.data}"
+        return response
 
-    def reboot(self, motor_id: int) -> bool:
-        comm_result, error = self.packet_handler.reboot(self.port_handler, motor_id)
-        return comm_result == COMM_SUCCESS and error == 0
+    def reboot_motors_srv(self, _request, response):
+        self.enable_torque(False)
+        all_ok = True
+        for m_id in self.joint_ids:
+            if not self.driver.reboot(m_id):
+                all_ok = False
+        
+        self.connect_and_initialize()
+        response.success = all_ok
+        response.message = "Motors rebooted successfully" if all_ok else "One or more motors failed reboot"
+        return response
+
+    # Diagonistcs to check the following from the motor:
+    # - current
+    # - voltage
+    # - temperature
+    def build_diagnostics(self, states: dict) -> DiagnosticArray:
+        diag_array = DiagnosticArray()
+        diag_array.header.stamp = self.get_clock().now().to_msg()
+
+        for idx, m_id in enumerate(self.joint_ids):
+            status = DiagnosticStatus()
+            status.name = f"arm_driver: {self.joint_names[idx]} (ID {m_id})"
+            status.hardware_id = str(m_id)
+
+            state = states.get(m_id)
+            if state is None:
+                status.level = DiagnosticStatus.STALE
+                status.message = "No data received from motor"
+                diag_array.status.append(status)
+                continue
+
+            current = raw_current_to_effort(state["current"])
+            voltage = raw_voltage_to_volts(state["voltage"]) if "voltage" in state else None
+            temperature = (
+                raw_temperature_to_celsius(state["temperature"]) if "temperature" in state else None
+            )
+
+            level = DiagnosticStatus.OK
+            messages = []
+
+            if temperature is not None:
+                if temperature >= self.temp_error_c:
+                    level = DiagnosticStatus.ERROR
+                    messages.append(f"Overtemperature ({temperature:.1f} C)")
+                elif temperature >= self.temp_warn_c:
+                    level = max(level, DiagnosticStatus.WARN)
+                    messages.append(f"High temperature ({temperature:.1f} C)")
+
+            status.level = level
+            status.message = "; ".join(messages) if messages else "OK"
+
+            status.values.append(KeyValue(key="Current (A)", value=f"{current:.3f}"))
+            if voltage is not None:
+                status.values.append(KeyValue(key="Voltage (V)", value=f"{voltage:.2f}"))
+            if temperature is not None:
+                status.values.append(KeyValue(key="Temperature (C)", value=f"{temperature:.1f}"))
+
+            diag_array.status.append(status)
+
+        return diag_array
+
+    def update_loop(self):
+        states = self.driver.read_states(self.joint_ids)
+        if not states:
+            return
+
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = self.joint_names
+
+        positions, velocities, efforts = [], [], []
+
+        for idx, m_id in enumerate(self.joint_ids):
+            if m_id in states:
+                pos_rad = ticks_to_rad(states[m_id]["position"])
+                vel_rad_s = raw_vel_to_rad_s(states[m_id]["velocity"])
+                effort = raw_current_to_effort(states[m_id]["current"])
+
+                positions.append(pos_rad)
+                velocities.append(vel_rad_s)
+                efforts.append(effort)
+
+                self.current_positions[idx] = pos_rad
+            else:
+                positions.append(self.current_positions[idx])
+                velocities.append(0.0)
+                efforts.append(0.0)
+
+        msg.position = positions
+        msg.velocity = velocities
+        msg.effort = efforts
+
+        self.joint_pub.publish(msg)
+
+        status_msg = String()
+        status_msg.data = self.status
+        self.status_pub.publish(status_msg)
+
+        self.diag_pub.publish(self.build_diagnostics(states))
+
+    def destroy_node(self):
+        self.enable_torque(False)
+        self.driver.disconnect()
+        super().destroy_node()
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ArmDriver()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

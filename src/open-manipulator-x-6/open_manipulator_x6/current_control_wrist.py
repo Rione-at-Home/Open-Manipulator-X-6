@@ -184,6 +184,7 @@ def run_segment(
     timeout_s: float,
     max_comm_failures: int,
     extra_bias: float = 0.0,
+    allow_early_exit: bool = True,
 ) -> SegmentResult:
     samples = []
     integral = 0.0
@@ -249,7 +250,7 @@ def run_segment(
 
         if now >= timeout_s:
             break
-        if settle_time is not None and now >= timeout_s * 0.15:
+        if allow_early_exit and settle_time is not None and now >= timeout_s * 0.15:
             break
 
     final_error = samples[-1].error if samples else float("nan")
@@ -269,14 +270,40 @@ def run_segment(
 def measure_quiescent_noise(
     driver, moving_id, reference_rad, kp, ki, kd, integral_max,
     grav_model, friction_comp, friction_eps_rad, max_pwm_raw,
-    duration_s, max_comm_failures,
+    duration_s, max_comm_failures, presettle_timeout_s: float = 1.0,
 ) -> float:
+    # BUGFIX (2026-10-01): this used to call run_segment with band_rad=1e9,
+    # dwell_samples=1 - meaning the very first sample ever read trivially
+    # satisfies "settled", which tripped run_segment's early-exit rule
+    # (break once settled + 15% of timeout) and silently truncated every
+    # noise-calibration window to ~15% of the requested duration_s,
+    # regardless of what you passed for --noise-calib-duration. Fixed by
+    # passing allow_early_exit=False so this segment actually runs the
+    # full window you asked for.
+    #
+    # Also added a short pre-settle phase: if the joint wasn't already at
+    # reference_rad when this is called (e.g. first run after a power
+    # cycle, or torque was just re-enabled), the noise window would
+    # otherwise include that approach transient, inflating sigma for a
+    # reason that has nothing to do with actual quiescent noise.
+    print(f"Pre-settling at reference={reference_rad:.3f} rad before measuring noise...")
+    presettle = run_segment(
+        driver, moving_id, "noise_presettle", reference_rad,
+        kp, ki, kd, integral_max, grav_model, friction_comp, friction_eps_rad,
+        max_pwm_raw, band_rad=0.01, dwell_samples=5, timeout_s=presettle_timeout_s,
+        max_comm_failures=max_comm_failures, allow_early_exit=True,
+    )
+    if presettle.settle_time_s is None:
+        print(f"  [WARNING] did not confirm pre-settle within {presettle_timeout_s:.1f}s "
+              f"(final error {presettle.final_error_rad*1000:+.2f} mrad). The noise window "
+              f"below may still include some approach transient.")
+
     print(f"Calibrating static position noise at reference={reference_rad:.3f} rad over {duration_s:.1f}s ...")
     result = run_segment(
         driver, moving_id, "noise_calib", reference_rad,
         kp, ki, kd, integral_max, grav_model, friction_comp, friction_eps_rad,
         max_pwm_raw, band_rad=1e9, dwell_samples=1, timeout_s=duration_s,
-        max_comm_failures=max_comm_failures,
+        max_comm_failures=max_comm_failures, allow_early_exit=False,
     )
     positions = [reference_rad - s.error for s in result.samples]
     if len(positions) < 2:
@@ -347,6 +374,10 @@ def main():
     ap.add_argument("--max-comm-failures", type=int, default=20)
 
     ap.add_argument("--noise-calib-duration", type=float, default=1.5)
+    ap.add_argument("--noise-presettle-timeout", type=float, default=1.0,
+                     help="Max time to confirm the joint is actually at --reference-rad before the "
+                          "noise-calibration window starts, so an approach transient doesn't get "
+                          "counted as quiescent noise.")
     ap.add_argument("--noise-k", type=float, default=4.0)
     ap.add_argument("--min-band-ticks", type=float, default=2.0)
     ap.add_argument("--dwell-samples", type=int, default=10)
@@ -388,11 +419,24 @@ def main():
 
         sigma = measure_quiescent_noise(
             driver, args.moving_id, args.reference_rad,
-            duration_s=args.noise_calib_duration, **ctrl,
+            duration_s=args.noise_calib_duration,
+            presettle_timeout_s=args.noise_presettle_timeout, **ctrl,
         )
         band_rad = max(args.noise_k * sigma, args.min_band_ticks * RAD_PER_TICK)
         print(f"Using settling band = {band_rad*1000:.3f} mrad "
-              f"(~{band_rad/RAD_PER_TICK:.1f} ticks) for all segments.\n")
+              f"(~{band_rad/RAD_PER_TICK:.1f} ticks) for all segments.")
+
+        if band_rad >= abs(args.step_rad):
+            print(
+                f"[WARNING] settling band ({band_rad*1000:.2f} mrad) is >= your step size "
+                f"({abs(args.step_rad)*1000:.2f} mrad)! The target will already be 'in band' "
+                f"before the joint moves at all, so every trial will report settling almost "
+                f"instantly regardless of real controller behavior - these results will NOT be "
+                f"usable for diagnosing anything. If this fires, stop and either re-run (noise "
+                f"calibration is sensitive to whatever transient was happening when it started), "
+                f"increase --noise-calib-duration, or use a larger --step-rad."
+            )
+        print()
 
         for i in range(args.trials):
             step = args.step_rad if not (args.alternate and i % 2 == 1) else -args.step_rad

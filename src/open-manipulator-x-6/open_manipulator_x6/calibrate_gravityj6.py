@@ -2,10 +2,22 @@
 """
 Joint 6 Static Gravity Calibration Script (PWM Mode Compatible).
 
-Sweeps Joint 6 through its angular range in Position Control Mode, records 
+Sweeps Joint 6 through its angular range in Position Control Mode, records
 steady-state holding PWM values at static poses, and fits a sinusoidal model:
     PWM_ff(theta) = A * cos(theta) + B * sin(theta) + C
 and a linear lookup table (LUT) array for runtime feedforward compensation.
+
+*** ADDED 2026-10-01: directional (hysteresis) split-fit ***
+The combined fit above averages the forward and reverse sweeps into one
+curve. If the joint's holding PWM genuinely depends on which direction it
+was approached from (e.g. cable-tension asymmetry, not just symmetric
+Coulomb friction), the combined fit is a compromise that's systematically
+wrong for one direction. This script now ALSO fits the forward-only and
+reverse-only samples separately, evaluates both at theta=0 (the middle of
+your settling-test operating range), and reports the delta between them.
+That delta is the number to feed into current_control_wrist.py's
+--dir-bias flag if you decide the residual needs a proactive feedforward
+correction rather than relying on the integral term.
 
 Usage:
     python3 calibrate_gravityj6.py --port /dev/ttyUSB0 --moving-id 6 --min-rad -1.2 --max-rad 1.2 --steps 13
@@ -117,6 +129,10 @@ def fit_sinusoidal_model(angles: np.ndarray, pwms: np.ndarray) -> tuple[float, f
     return float(params[0]), float(params[1]), float(params[2])
 
 
+def eval_model(A: float, B: float, C: float, theta: float) -> float:
+    return A * np.cos(theta) + B * np.sin(theta) + C
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", default="/dev/ttyUSB0")
@@ -129,6 +145,9 @@ def main():
     ap.add_argument("--steps", type=int, default=13, help="Number of evaluation poses.")
     ap.add_argument("--hold-time", type=float, default=1.5, help="Settling delay before sampling (s).")
     ap.add_argument("--sample-duration", type=float, default=1.0, help="Window length for averaging holding PWM (s).")
+    ap.add_argument("--eval-theta", type=float, default=0.0,
+                     help="Angle at which to evaluate/report the forward vs. reverse directional "
+                          "delta (default 0.0, matching the settling-test operating point).")
     ap.add_argument("--out-dir", default="./gravity_calib_out")
     args = ap.parse_args()
 
@@ -174,8 +193,19 @@ def main():
     angles = np.array([d["meas_rad"] for d in data])
     raw_pwms = np.array([d["raw_pwm"] for d in data])
 
-    # Fit Sinusoidal Model for raw motor PWM units
+    # Combined fit (both directions pooled), as before
     A, B, C = fit_sinusoidal_model(angles, raw_pwms)
+
+    # Directional split fits - this is the new part
+    fwd_mask = np.array([d["direction"] == "forward" for d in data])
+    rev_mask = ~fwd_mask
+
+    A_f, B_f, C_f = fit_sinusoidal_model(angles[fwd_mask], raw_pwms[fwd_mask])
+    A_r, B_r, C_r = fit_sinusoidal_model(angles[rev_mask], raw_pwms[rev_mask])
+
+    pwm_fwd_at_eval = eval_model(A_f, B_f, C_f, args.eval_theta)
+    pwm_rev_at_eval = eval_model(A_r, B_r, C_r, args.eval_theta)
+    hysteresis_delta = pwm_fwd_at_eval - pwm_rev_at_eval
 
     unique_targets = sorted(list(set(d["target_rad"] for d in data)))
     lut_angles = []
@@ -201,6 +231,16 @@ def main():
             "B_sin_amplitude": B,
             "C_bias_offset": C,
         },
+        "directional_fits": {
+            "note": "Fit separately on forward-only and reverse-only sweep samples to check for "
+                    "hysteresis the combined fit above cannot represent (it is single-valued in theta).",
+            "forward_only": {"A": A_f, "B": B_f, "C": C_f},
+            "reverse_only": {"A": A_r, "B": B_r, "C": C_r},
+            "eval_theta_rad": args.eval_theta,
+            "pwm_forward_at_eval_theta": pwm_fwd_at_eval,
+            "pwm_reverse_at_eval_theta": pwm_rev_at_eval,
+            "delta_at_eval_theta_raw_pwm": hysteresis_delta,
+        },
         "lookup_table": {
             "angles_rad": lut_angles,
             "holding_pwms": lut_pwms,
@@ -212,25 +252,44 @@ def main():
         json.dump(summary, f, indent=2)
 
     print("\nCALIBRATION COMPLETE")
-    print(f"Fitted Gravity Equation (Raw PWM Units):")
+    print(f"Fitted Gravity Equation (Raw PWM Units, combined forward+reverse):")
     print(f"  PWM_ff(theta) = ({A:+.3f}) * cos(theta) + ({B:+.3f}) * sin(theta) + ({C:+.3f})")
+
+    print(f"\n--- Directional (hysteresis) check, evaluated at theta={args.eval_theta:.3f} rad ---")
+    print(f"Forward-only fit:  PWM_ff(theta) = ({A_f:+.3f})*cos + ({B_f:+.3f})*sin + ({C_f:+.3f})")
+    print(f"Reverse-only fit:  PWM_ff(theta) = ({A_r:+.3f})*cos + ({B_r:+.3f})*sin + ({C_r:+.3f})")
+    print(f"  Forward-direction holding PWM at theta={args.eval_theta:.3f}: {pwm_fwd_at_eval:+.2f}")
+    print(f"  Reverse-direction holding PWM at theta={args.eval_theta:.3f}: {pwm_rev_at_eval:+.2f}")
+    print(f"  Delta (forward - reverse): {hysteresis_delta:+.2f} raw PWM units")
+    print("  If this delta is a meaningful fraction of your --friction-comp magnitude, it is a")
+    print("  candidate value for current_control_wrist.py's --dir-bias flag - apply it to whichever")
+    print("  direction showed the larger residual in your settling tests (per tonight's data, that")
+    print("  was the positive direction).")
+
     print(f"\nOutputs written to: {out_dir.resolve()}")
 
     try:
         import matplotlib.pyplot as plt
         theta_grid = np.linspace(min(angles), max(angles), 200)
         pwm_fit = A * np.cos(theta_grid) + B * np.sin(theta_grid) + C
+        pwm_fit_fwd = A_f * np.cos(theta_grid) + B_f * np.sin(theta_grid) + C_f
+        pwm_fit_rev = A_r * np.cos(theta_grid) + B_r * np.sin(theta_grid) + C_r
 
         plt.figure(figsize=(8, 5))
-        plt.plot(angles[:len(grid_forward)], raw_pwms[:len(grid_forward)], "ro", label="Forward Sweep (+)")
-        plt.plot(angles[len(grid_forward):], raw_pwms[len(grid_forward):], "bo", label="Reverse Sweep (-)")
-        plt.plot(lut_angles, lut_pwms, "k--", alpha=0.5, label="Averaged LUT")
-        plt.plot(theta_grid, pwm_fit, "g-", linewidth=2, label=f"Fit: {A:.1f}cos({B:+.1f}sin){C:+.1f}")
-        plt.title(f"Joint {args.moving_id} Gravity Holding PWM vs. Position")
+        plt.plot(angles[fwd_mask], raw_pwms[fwd_mask], "ro", label="Forward Sweep (+) samples")
+        plt.plot(angles[rev_mask], raw_pwms[rev_mask], "bo", label="Reverse Sweep (-) samples")
+        plt.plot(lut_angles, lut_pwms, "k--", alpha=0.4, label="Averaged LUT")
+        plt.plot(theta_grid, pwm_fit, "g-", linewidth=2, label="Combined fit")
+        plt.plot(theta_grid, pwm_fit_fwd, "r--", linewidth=1.5, alpha=0.8, label="Forward-only fit")
+        plt.plot(theta_grid, pwm_fit_rev, "b--", linewidth=1.5, alpha=0.8, label="Reverse-only fit")
+        plt.axvline(args.eval_theta, color="gray", linestyle=":", alpha=0.6,
+                    label=f"eval theta={args.eval_theta:.2f}")
+        plt.title(f"Joint {args.moving_id} Gravity Holding PWM vs. Position\n"
+                  f"(directional delta at eval theta: {hysteresis_delta:+.2f} raw PWM)")
         plt.xlabel("Joint Angle (rad)")
         plt.ylabel("Raw Motor Holding PWM")
         plt.grid(True, linestyle="--", alpha=0.6)
-        plt.legend()
+        plt.legend(fontsize=8)
         plt.tight_layout()
         plt.savefig(out_dir / "gravity_holding_curve.png", dpi=150)
     except ImportError:

@@ -1,0 +1,53 @@
+running egg_info
+writing ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/PKG-INFO
+writing dependency_links to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/dependency_links.txt
+writing entry points to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/entry_points.txt
+writing requirements to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/requires.txt
+writing top-level names to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/top_level.txt
+reading manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+writing manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+running build
+running build_py
+copying open_manipulator_x6/gui_dashboard.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/utils.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/current_control_wrist.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/arm_driver.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/__init__.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/calibrate_gravityj6.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/session_logger.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/dynamixel_driver.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+copying open_manipulator_x6/settling_time_test.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+running install
+running install_lib
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/gui_dashboard.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/utils.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/current_control_wrist.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/arm_driver.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/__init__.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/calibrate_gravityj6.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/session_logger.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/dynamixel_driver.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/settling_time_test.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/gui_dashboard.py to gui_dashboard.cpython-310.pyc
+byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/utils.py to utils.cpython-310.pyc
+byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/current_control_wrist.py to current_control_wrist.cpython-310.pyc
+byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/arm_driver.py to arm_driver.cpython-310.pyc
+byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/calibrate_gravityj6.py to calibrate_gravityj6.cpython-310.pyc
+byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/session_logger.py to session_logger.cpython-310.pyc
+byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/dynamixel_driver.py to dynamixel_driver.cpython-310.pyc
+byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/settling_time_test.py to settling_time_test.cpython-310.pyc
+running install_data
+creating /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/share/ament_index
+creating /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/share/ament_index/resource_index
+creating /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/share/ament_index/resource_index/packages
+copying resource/open_manipulator_x6 -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/share/ament_index/resource_index/packages
+creating /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/share/open_manipulator_x6/launch
+copying launch/arm.launch.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/share/open_manipulator_x6/launch
+creating /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/share/open_manipulator_x6/config
+copying config/motors.yaml -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/share/open_manipulator_x6/config
+running install_egg_info
+removing '/home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6-0.1.0-py3.10.egg-info' (and everything under it)
+Copying ../../build/open_manipulator_x6/open_manipulator_x6.egg-info to /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6-0.1.0-py3.10.egg-info
+running install_scripts
+Installing arm_driver script to /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/open_manipulator_x6
+writing list of installed files to '/home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/install.log'

@@ -14,11 +14,15 @@ ADDR_MODEL_NUMBER = 0
 ADDR_OPERATING_MODE = 11
 ADDR_TORQUE_ENABLE = 64
 ADDR_HARDWARE_ERROR = 70
+ADDR_PWM_LIMIT = 36
+ADDR_CURRENT_LIMIT = 38  # XM430 only (XL430 has no current sensor)
 ADDR_POSITION_D_GAIN = 80
 ADDR_POSITION_I_GAIN = 82
 ADDR_POSITION_P_GAIN = 84
 ADDR_GOAL_PWM = 100
 ADDR_GOAL_CURRENT = 102
+ADDR_PROFILE_ACCELERATION = 108
+ADDR_PROFILE_VELOCITY = 112
 ADDR_GOAL_POSITION = 116
 ADDR_PRESENT_CURRENT = 126
 ADDR_PRESENT_VELOCITY = 128
@@ -35,13 +39,18 @@ LEN_PRESENT_STATE = 21
 
 POSITION_CONTROL_MODE = 3
 CURRENT_CONTROL_MODE = 0
+CURRENT_BASED_POSITION_MODE = 5  # position control with Goal Current acting as a torque cap (XM430 only)
 PWM_CONTROL_MODE = 16
 PROTOCOL_VERSION = 2.0
 
+XL430_MODEL_NUMBER = 1060
+
+# Check against the e-manual for your exact units: XM430-W350 is 1020 and XM430-W210 is 1030
+# (the labels were the other way round in the previous version; only error messages used them).
 KNOWN_MODEL_NUMBERS = {
     1060: "XL430-W250",
-    1020: "XM430-W210",
-    1030: "XM430-W350",
+    1020: "XM430-W350",
+    1030: "XM430-W210",
 }
 
 
@@ -205,6 +214,72 @@ class DynamixelHardwareDriver:
                 all_success = False
 
         return all_success
+
+    def has_current_sensor(self, motor_id: int) -> bool | None:
+        """True for XM430, False for XL430 (register 126 is Present Load there). None if unreadable."""
+        model = self.read_model_number(motor_id)
+        if model is None:
+            return None
+        return model != XL430_MODEL_NUMBER
+
+    def write_profile(self, joint_ids: list, velocity: int, acceleration: int) -> bool:
+        """
+        Writes Profile Velocity (0.229 rpm/unit) and Profile Acceleration (214.577 rpm^2/unit).
+        0 means "no limit", so the caller must pass a positive velocity to get slow motion.
+        These are RAM registers, so they can be written with torque on or off.
+        """
+        ok = True
+        for m_id in joint_ids:
+            for addr, val in ((ADDR_PROFILE_ACCELERATION, acceleration),
+                              (ADDR_PROFILE_VELOCITY, velocity)):
+                comm_result, error = self.packet_handler.write4ByteTxRx(
+                    self.port_handler, m_id, addr, int(val)
+                )
+                if comm_result != COMM_SUCCESS or error != 0:
+                    self.logger.error(f"Profile write failed on ID {m_id} (addr {addr}, error {error}).")
+                    ok = False
+        return ok
+
+    def read_profile(self, motor_id: int) -> dict | None:
+        out = {}
+        for name, addr in (("acceleration", ADDR_PROFILE_ACCELERATION),
+                           ("velocity", ADDR_PROFILE_VELOCITY)):
+            value, comm_result, error = self.packet_handler.read4ByteTxRx(
+                self.port_handler, motor_id, addr
+            )
+            if comm_result != COMM_SUCCESS or error != 0:
+                return None
+            out[name] = value
+        return out
+
+    def read_present_positions(self, joint_ids: list) -> dict:
+        """Returns {id: raw_position_ticks} for the joints that answered."""
+        states = self.read_states(joint_ids)
+        return {m_id: states[m_id]["position"] for m_id in joint_ids if m_id in states}
+
+    def enable_torque_holding_position(self, joint_ids: list) -> bool:
+        """
+        Safe torque-on: first copies each joint's Present Position into its Goal Position,
+        then enables torque, so no joint can jump to a stale goal. Refuses (returns False,
+        torque left off) if any joint cannot be read.
+        """
+        present = self.read_present_positions(joint_ids)
+        missing = [m_id for m_id in joint_ids if m_id not in present]
+        if missing:
+            self.logger.error(f"Cannot read present position of IDs {missing}; torque NOT enabled.")
+            return False
+        ticks = [self._signed32_to_ticks(present[m_id]) for m_id in joint_ids]
+        if not self.write_positions(joint_ids, ticks):
+            self.logger.error("Could not write hold positions; torque NOT enabled.")
+            return False
+        return self.enable_torque(joint_ids, True)
+
+    @staticmethod
+    def _signed32_to_ticks(value: int) -> int:
+        # Present Position is a signed 32-bit value; write_positions packs it back as 4 raw bytes,
+        # so a negative reading must stay negative (not be clamped), and an unsigned read of a
+        # negative value is converted here.
+        return value - (1 << 32) if value > 0x7FFFFFFF else value
 
     def write_goal_current(self, motor_id: int, raw_current: int) -> bool:
         value = int(raw_current) & 0xFFFF

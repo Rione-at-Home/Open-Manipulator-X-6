@@ -1,0 +1,12 @@
+arm_driver:
+  ros__parameters:
+    port: /dev/serial/by-id/usb-FTDI_...-if00-port0   # your U2D2; see `ls /dev/serial/by-id`
+    baudrate: 1000000
+    joint_ids: [1, 2, 3, 4, 5, 6, 7]
+    profile_velocity: 40          # ~9 rpm. Raise slowly (e.g. 60, 80) once contact looks good.
+    profile_acceleration: 20
+    gripper_current_mode: true
+    gripper_goal_current: 100     # ~0.27 A cap. Raise live with: ros2 topic pub --once /arm_gripper_current std_msgs/msg/Int16 "{data: 150}"
+    gripper_current_max: 300      # hard ceiling for that topic (~0.8 A)
+    leave_torque_on_shutdown: true
+ 

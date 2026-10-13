@@ -1,6 +1,6 @@
 arm_driver:
   ros__parameters:
-    port: /dev/serial/by-id/usb-FTDI_...-if00-port0   # your U2D2; see `ls /dev/serial/by-id`
+    port: /dev/ttyUSB2   # your U2D2; see `ls /dev/serial/by-id`
     baudrate: 1000000
     joint_ids: [1, 2, 3, 4, 5, 6, 7]
     profile_velocity: 40          # ~9 rpm. Raise slowly (e.g. 60, 80) once contact looks good.

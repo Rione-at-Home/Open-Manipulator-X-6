@@ -3,6 +3,7 @@
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/current_control_wrist.py
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/arm_driver.py
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__init__.py
+/home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/keyboard_teleop.py
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/calibrate_gravityj6.py
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/session_logger.py
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/dynamixel_driver.py
@@ -12,6 +13,7 @@
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__pycache__/current_control_wrist.cpython-310.pyc
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__pycache__/arm_driver.cpython-310.pyc
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__pycache__/__init__.cpython-310.pyc
+/home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__pycache__/keyboard_teleop.cpython-310.pyc
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__pycache__/calibrate_gravityj6.cpython-310.pyc
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__pycache__/session_logger.cpython-310.pyc
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/__pycache__/dynamixel_driver.cpython-310.pyc
@@ -28,4 +30,5 @@
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6-0.1.0-py3.10.egg-info/zip-safe
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6-0.1.0-py3.10.egg-info/SOURCES.txt
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/open_manipulator_x6/arm_driver
+/home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/open_manipulator_x6/keyboard_teleop
 /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/open_manipulator_x6/session_logger

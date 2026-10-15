@@ -1,0 +1,26 @@
+[0.471s] Invoking command in '/home/gilbertsoco/Open-Manipulator-X-6/src/open-manipulator-x-6': PYTHONPATH=/home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages: /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/open_manipulator_x6 build --build-base /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build install --record /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/install.log --install-scripts $base/lib/open_manipulator_x6 --single-version-externally-managed install_data
+[0.629s] running egg_info
+[0.629s] writing ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/PKG-INFO
+[0.630s] writing dependency_links to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/dependency_links.txt
+[0.630s] writing entry points to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/entry_points.txt
+[0.630s] writing requirements to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/requires.txt
+[0.630s] writing top-level names to ../../build/open_manipulator_x6/open_manipulator_x6.egg-info/top_level.txt
+[0.632s] reading manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+[0.639s] writing manifest file '../../build/open_manipulator_x6/open_manipulator_x6.egg-info/SOURCES.txt'
+[0.639s] running build
+[0.639s] running build_py
+[0.639s] copying open_manipulator_x6/keyboard_teleop.py -> /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6
+[0.640s] running install
+[0.640s] running install_lib
+[0.641s] copying /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build/lib/open_manipulator_x6/keyboard_teleop.py -> /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6
+[0.641s] byte-compiling /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6/keyboard_teleop.py to keyboard_teleop.cpython-310.pyc
+[0.645s] running install_data
+[0.645s] running install_egg_info
+[0.647s] removing '/home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6-0.1.0-py3.10.egg-info' (and everything under it)
+[0.647s] Copying ../../build/open_manipulator_x6/open_manipulator_x6.egg-info to /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages/open_manipulator_x6-0.1.0-py3.10.egg-info
+[0.648s] running install_scripts
+[0.665s] Installing arm_driver script to /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/open_manipulator_x6
+[0.666s] Installing keyboard_teleop script to /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/open_manipulator_x6
+[0.666s] Installing session_logger script to /home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/open_manipulator_x6
+[0.666s] writing list of installed files to '/home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/install.log'
+[0.687s] Invoked command in '/home/gilbertsoco/Open-Manipulator-X-6/src/open-manipulator-x-6' returned '0': PYTHONPATH=/home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/gilbertsoco/Open-Manipulator-X-6/install/open_manipulator_x6/lib/python3.10/site-packages: /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/open_manipulator_x6 build --build-base /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/build install --record /home/gilbertsoco/Open-Manipulator-X-6/build/open_manipulator_x6/install.log --install-scripts $base/lib/open_manipulator_x6 --single-version-externally-managed install_data

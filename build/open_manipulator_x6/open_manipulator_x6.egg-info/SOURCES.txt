@@ -16,6 +16,7 @@ open_manipulator_x6/calibrate_gravityj6.py
 open_manipulator_x6/current_control_wrist.py
 open_manipulator_x6/dynamixel_driver.py
 open_manipulator_x6/gui_dashboard.py
+open_manipulator_x6/keyboard_teleop.py
 open_manipulator_x6/session_logger.py
 open_manipulator_x6/settling_time_test.py
 open_manipulator_x6/utils.py

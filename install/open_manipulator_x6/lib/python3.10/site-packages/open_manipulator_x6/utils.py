@@ -69,3 +69,28 @@ def raw_temperature_to_celsius(raw_temp: int) -> float:
     Converts raw present-temperature register reading to degrees Celsius.
     """
     return float(raw_temp)
+
+# --- Model-aware effort -------------------------------------------------------------------
+# Register 126 means different things on the two servo families:
+#   XM430: Present Current, signed, 1 unit = 2.69 mA   -> reported in Amps
+#   XL430: Present Load,    signed, 1 unit = 0.1 % PWM -> reported as a fraction (-1.0 .. 1.0)
+# Both go in JointState.effort, so a consumer must know which joints are which. The arm driver
+# publishes the family of every joint in /arm_diagnostics ("Effort unit").
+RAW_LOAD_TO_FRACTION = 0.001  # 1 unit = 0.1 % of max output
+
+
+def raw_load_to_fraction(raw_load: int) -> float:
+    """XL430 Present Load register -> fraction of maximum output, signed (-1.0 .. 1.0)."""
+    if raw_load > 32767:
+        raw_load -= 65536
+    return float(raw_load) * RAW_LOAD_TO_FRACTION
+
+
+def raw_effort(raw: int, has_current_sensor: bool) -> float:
+    """Amps for XM430 joints, load fraction for XL430 joints."""
+    return raw_current_to_effort(raw) if has_current_sensor else raw_load_to_fraction(raw)
+
+
+def amps_to_raw_current(amps: float) -> int:
+    """Amps -> XM430 Goal Current register units (rounded, sign kept)."""
+    return int(round(amps / RAW_CURRENT_TO_EFFORT))

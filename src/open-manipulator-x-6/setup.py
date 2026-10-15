@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'arm_driver = open_manipulator_x6.arm_driver:main',
+            'session_logger = open_manipulator_x6.session_logger:main',
         ],
     },
 )

@@ -1,0 +1,38 @@
+# Bottle stability test: pick up the empty 650 ml Ayataka bottle, lift, carry, tilt, put back.
+# Teach these poses first with the pendant (names must match): home, pre_grasp, grasp, lift,
+# carry, tilt, place. Also press "Set gripper open = current position" once with the gripper open
+# wide enough for the bottle.
+name: bottle_stability
+poses_file: ~/Open-Manipulator-X-6/poses.yaml
+repeats: 5
+profile_velocity: 30         # slow
+gripper_current: 80          # empty PET bottle crushes easily; raise in steps if it slips
+
+setup:
+  - move: home
+  - gripper: open
+
+steps:
+  - rezero                   # gripper open, nothing touching the pads
+  - move: pre_grasp
+  - move: grasp
+  - gripper: close           # close until both pads touch, then squeeze_rad past contact
+  - wait: 2.0                # static hold
+  - move: lift
+  - wait: 2.0
+  - move: carry
+  - move: tilt               # wrist tilt with the bottle held
+  - wait: 2.0
+  - move: carry
+  - move: place
+  - gripper: open
+  - move: pre_grasp
+
+teardown:
+  - move: home
+
+# Optional tuning (defaults shown)
+squeeze_rad: 0.05            # how far past first contact to drive the gripper target
+max_close_travel_rad: 1.2    # give up (logged as no_contact) after this much closing
+move_timeout_s: 15.0
+move_tolerance_rad: 0.03

@@ -13,6 +13,11 @@
   <depend>std_srvs</depend>
   <depend>diagnostic_msgs</depend>
   <depend>python3-dynamixel-sdk</depend>
+  <exec_depend>joy</exec_depend>
+  <exec_depend>python3-pyqt5</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>flexigrasp_msgs</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

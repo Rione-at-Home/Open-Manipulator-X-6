@@ -14,7 +14,8 @@ Keys (run in a real terminal; hold a key to repeat):
     g         flip which direction counts as "close"  (press if w opens the gripper)
     ]  /  [   gripper current cap  + / -  (10 units)
     =  /  -   speed (profile velocity) + / -  (5 units)
-    c         toggle stop-closing-on-contact (needs both pads in contact to block closing)
+    c         toggle stop-on-contact: when both pads first touch, the gripper is told to hold
+              where it is right then (stops queued closing), and further closing is blocked
     space     STOP: /arm_stop, targets re-sync to where the arm is
     h         help          x or Ctrl-C   quit (torque stays on, arm holds its pose)
 
@@ -65,6 +66,25 @@ class TeleopCore:
         hit = new != self.targets[name] + delta
         self.targets[name] = new
         return hit
+
+    def resync_targets(self, names, positions):
+        """Take the arm's measured pose as the new targets, and re-centre the +/- range on it.
+        Used after a pause, so a key press never sends targets that another program has since
+        moved (and never snaps a joint back into a range centred on an old pose)."""
+        for n, p in zip(names, positions):
+            if n in self.targets:
+                self.targets[n] = float(p)
+                self.origin[n] = float(p)
+
+    def hold_gripper_at(self, present):
+        """Contact just made: drop any queued closing by targeting the measured position.
+        Returns True if a command should be sent."""
+        if not self.ready or not self.contact_stop:
+            return False
+        lo, hi = self.origin[self.gripper] - self.g_range, self.origin[self.gripper] + self.g_range
+        self.targets[self.gripper] = min(hi, max(lo, present))
+        self.message = f"contact: gripper held at {self.targets[self.gripper]:+.3f}"
+        return True
 
     def handle(self, key, contact_blocks_close=False):
         """Returns a set of actions: 'command', 'cap', 'vel', 'stop', 'quit'."""
@@ -159,6 +179,9 @@ def main(args=None):  # pragma: no cover - needs ROS 2 and a terminal
                         TactileFrame, f"/{g('topic_prefix')}/{f}/frame",
                         lambda m, f=f: self.on_pad(f, m), qos_profile_sensor_data)
             self.quit = False
+            self.was_in_contact = False
+            self.last_cmd_time = -1e9
+            self.idle_resync_s = 1.0
             self.last_draw = 0.0
             self.create_timer(0.03, self.tick)
 
@@ -183,6 +206,7 @@ def main(args=None):  # pragma: no cover - needs ROS 2 and a terminal
             msg.name = list(self.core.names)
             msg.position = [self.core.targets[n] for n in msg.name]
             self.pub_cmd.publish(msg)
+            self.last_cmd_time = time.monotonic()
 
         def apply(self, acts):
             if "command" in acts:
@@ -201,11 +225,24 @@ def main(args=None):  # pragma: no cover - needs ROS 2 and a terminal
                 self.quit = True
 
         def tick(self):
+            contact = self.both_in_contact()
+            active = time.monotonic() - self.last_cmd_time <= self.idle_resync_s
+            # Only react to contact while this teleop is actually being used, so a sequence run
+            # (or another teleop) is never overridden by stale targets from here.
+            if contact and not self.was_in_contact and self.core.ready and active:
+                names, positions = self.latest
+                if self.core.gripper in names and self.core.hold_gripper_at(
+                        positions[names.index(self.core.gripper)]):
+                    self.send_command()
+            self.was_in_contact = contact
             while select.select([sys.stdin], [], [], 0)[0]:
                 data = os.read(sys.stdin.fileno(), 64).decode(errors="ignore")
                 if not data:
                     break
                 for ch in data:
+                    if (ch.lower() in "adws" and self.core.ready
+                            and time.monotonic() - self.last_cmd_time > self.idle_resync_s):
+                        self.core.resync_targets(*self.latest)
                     self.apply(self.core.handle(ch, self.both_in_contact()))
             now = time.monotonic()
             if now - self.last_draw > 0.2:

@@ -27,7 +27,7 @@ class ArmDriver(Node):
         super().__init__("arm_driver")
 
         # Parameters
-        self.declare_parameter("port", "/dev/ttyUSB2") # Check the actual port name on your system
+        self.declare_parameter("port", "/dev/ttyUSB0") # Check the actual port name on your system
         self.declare_parameter("baudrate", 1000000)  # 1 Mbps . Check the actual baudrate for your Dynamixel motors
 
         # NOTE: gripper ID (6) is a placeholder — swap in the real ID once you
@@ -56,6 +56,10 @@ class ArmDriver(Node):
         self.declare_parameter("gripper_current_mode", True)
         self.declare_parameter("gripper_goal_current", 100)
         self.declare_parameter("gripper_current_max", 300)  # hard ceiling for /arm_gripper_current
+        # Homing Offset for the gripper, in ticks (4096 per turn). Present Position = actual + offset.
+        # -1024 shifts the gripper's working range by -90 deg so it no longer touches the driver's
+        # 0..4095 goal clamp. 0 = factory default. Written to EEPROM only when it differs.
+        self.declare_parameter("gripper_homing_offset", 0)
         # True: torque stays on when this node exits (the arm holds its pose instead of dropping).
         self.declare_parameter("leave_torque_on_shutdown", True)
 
@@ -76,6 +80,7 @@ class ArmDriver(Node):
         self.gripper_goal_current = gp("gripper_goal_current").get_parameter_value().integer_value
         self.gripper_current_max = gp("gripper_current_max").get_parameter_value().integer_value
         self.leave_torque_on = gp("leave_torque_on_shutdown").get_parameter_value().bool_value
+        self.gripper_homing_offset = gp("gripper_homing_offset").get_parameter_value().integer_value
 
         self.joint_map = dict(zip(self.joint_names, self.joint_ids))
         self.gripper_id = self.joint_map.get(self.gripper_name)
@@ -141,6 +146,13 @@ class ArmDriver(Node):
                 self.get_logger().error(f"Could not read model number of ID {m_id}.")
                 return False
             self.has_current[m_id] = sensor
+
+        # Gripper homing offset (EEPROM, torque is already off here).
+        if self.gripper_id is not None:
+            if not self.driver.set_homing_offset(self.gripper_id, self.gripper_homing_offset):
+                self.get_logger().error("Failed to set gripper homing offset; aborting init.")
+                return False
+            self.get_logger().info(f"Gripper homing offset = {self.gripper_homing_offset} ticks.")
 
         # Everything in plain position control except (optionally) the gripper.
         gripper_current = (

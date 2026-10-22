@@ -24,6 +24,9 @@ setup(
         'console_scripts': [
             'arm_driver = open_manipulator_x6.arm_driver:main',
             'session_logger = open_manipulator_x6.session_logger:main',
+            'keyboard_teleop = open_manipulator_x6.keyboard_teleop:main',
+            "teach_pendant = open_manipulator_x6.teach_pendant:main",
+            "sequence_runner = open_manipulator_x6.sequence_runner:main",
         ],
     },
 )

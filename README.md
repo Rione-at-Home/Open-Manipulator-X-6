@@ -1,4 +1,4 @@
-﻿# OpenManipulator-X 6-DOF Hardware Control
+# OpenManipulator-X 6-DOF Hardware Control
 
 A ROS 2 Humble driver package for real-time hardware control of a modified 6-DOF + Gripper OpenManipulator-X robotic arm (featuring a custom wrist-rotate joint) over serial communication using the Dynamixel SDK.
 
@@ -34,3 +34,64 @@ ros2 launch open_manipulator_x6 arm.launch.py
 ```
 
 
+## Teach and replay for the Open Manipulator X6
+
+Teach named poses with the gamepad, then replay them as a sequence while the pads and arm are recorded.
+
+
+
+### 1. Teach
+
+Start `arm_driver` and the FlexiGrasp pad node as usual, then:
+
+Note: Ensure to run the arm_driver with the parameter file as shown below.
+
+```bash
+ros2 run open_manipulator_x6 arm_driver --ros-args --params-file ~/Open-Manipulator-X-6/arm_params.yaml
+```
+
+   
+
+```bash
+ros2 launch open_manipulator_x6 teach.launch.py
+```
+
+| Button | Action |
+| --- | --- |
+| L1 / R1 | previous / next joint |
+| circle / cross (hold) | move forward / reverse (gripper: close / open) |
+| triangle | fine / coarse |
+| square | save pose (name typed in the window) |
+| options | STOP |
+
+- Check the button numbers once: the grey line at the bottom of the window shows `last buttons pressed`. If any differs from the table in `config/joy_ps4.yaml`, edit the file and restart.
+- Poses save the measured arm joints only. The gripper is not saved.
+- With the gripper open wide enough for the bottle, press **Set gripper open = current position** once.
+- Suggested poses for the bottle test: `home`, `pre_grasp`, `grasp`, `lift`, `carry`, `tilt`, `place`.
+- Poses go to `~/Open-Manipulator-X-6/poses.yaml`.
+
+### 2. Write the sequence
+
+Copy `config/bottle_sequence.example.yaml` to `~/Open-Manipulator-X-6/bottle_sequence.yaml` and edit the steps. Step types: `move: <pose>`, `gripper: open|close`, `wait: <s>`, `speed: <n>`, `cap: <n>`, `rezero`, `mark: <label>`.
+
+`gripper: close` closes in small steps until both pads report contact, then sets the target `squeeze_rad` past contact so the current cap sets the grip force. If no contact is found within `max_close_travel_rad`, it is logged as `no_contact` and the sequence carries on.
+
+### 3. Replay and record
+
+Close the teach pendant and the keyboard teleop first, so only the runner commands the arm.
+
+```bash
+ros2 launch open_manipulator_x6 bottle_test.launch.py \
+  sequence:=~/Open-Manipulator-X-6/bottle_sequence.yaml label:=bottle_1
+```
+
+- Starts the session logger, a bag recording and the runner; all three stop when the sequence ends.
+- 3 s countdown before the first move. Any `/arm_stop` (gamepad options, keyboard space, pendant STOP, Ctrl-C) aborts.
+- Outputs in `~/flexigrasp_logs/`: `<stamp>_bottle_1.csv` (pads + joints + current step per row), `<stamp>_bottle_1_steps.csv` (one row per step: result, duration, contact position), `<stamp>_bottle_1_bag/`.
+- Add the camera with `extra_topics:="/image_raw"`.
+
+### Safety notes
+
+- Moves are point to point at the driver's profile velocity (30 in the example). Test a new sequence with `repeats: 1` and a hand near the power switch.
+- Poses are replayed as saved, with no collision checking. Re-check poses after anything on the table moves.
+- The empty PET bottle crushes easily: the example starts at a gripper cap of 80 (~0.22 A). Raise it in steps only if the bottle slips.

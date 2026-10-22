@@ -8,12 +8,14 @@ system clock (the pad node stamps receive time with the system clock too).
 
 For raw pad images use `ros2 bag record` as well; this CSV is the quick-look companion.
 
-    ros2 run open_manipulator_x6 session_logger --ros-args -p out_dir:=~/flexigrasp_logs -p label:=tilt_sweep_1
+    ros2 run flexigrasp session_logger --ros-args -p out_dir:=~/flexigrasp_logs -p label:=tilt_sweep_1
 """
 import csv
 import os
 import time
 from typing import Dict, List, Optional
+
+STEP_FIELDS = ["seq_phase", "seq_repeat", "seq_step"]   # filled from /sequence_step when a sequence runs
 
 PAD_FIELDS = ["seq", "age_ms", "in_contact", "peak", "total", "contact_taxels",
               "centroid_row", "centroid_col", "bad_frames"]
@@ -39,9 +41,11 @@ class SessionWriter:
             head += [f"{f}_{k}" for k in PAD_FIELDS]
         for j in self.joint_names:
             head += [f"{j}_pos", f"{j}_vel", f"{j}_effort"]
+        head += STEP_FIELDS
         self._w.writerow(head)
 
-    def write(self, t: float, pads: Dict[str, Optional[dict]], names, pos, vel, eff):
+    def write(self, t: float, pads: Dict[str, Optional[dict]], names, pos, vel, eff,
+              step: Optional[dict] = None):
         if self._w is None:
             self._open(names)
         idx = {n: i for i, n in enumerate(names)}
@@ -58,6 +62,8 @@ class SessionWriter:
             def pick(a):
                 return f"{a[i]:.5f}" if i is not None and i < len(a) else ""
             row += [pick(pos), pick(vel), pick(eff)]
+        step = step or {}
+        row += [step.get("phase", ""), step.get("repeat", ""), step.get("step", "")]
         self._w.writerow(row)
         self.rows += 1
         if self.rows % 50 == 0:
@@ -80,7 +86,9 @@ def main(args=None):  # pragma: no cover - needs ROS 2
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
+    import json
     from sensor_msgs.msg import JointState
+    from std_msgs.msg import String
     from flexigrasp_msgs.msg import TactileFrame
 
     class SessionLogger(Node):
@@ -99,7 +107,20 @@ def main(args=None):  # pragma: no cover - needs ROS 2
                 self.create_subscription(TactileFrame, f"/{prefix}/{f}/frame",
                                          lambda m, f=f: self.on_pad(f, m), qos_profile_sensor_data)
             self.create_subscription(JointState, "/joint_states", self.on_joints, 10)
+            self.step: Optional[dict] = None
+            self.create_subscription(String, "/sequence_step", self.on_step, 10)
             self.get_logger().info(f"Logging to {path}")
+
+        def on_step(self, m):
+            try:
+                ev = json.loads(m.data)
+            except ValueError:
+                return
+            # Rows carry the step that is running; between steps the last one stays until the next starts.
+            if ev.get("status") == "start":
+                self.step = ev
+            elif ev.get("status") == "aborted":
+                self.step = dict(ev, step=f"{ev.get('step', '')} (aborted)")
 
         def on_pad(self, f, m):
             self.latest[f] = dict(seq=m.seq, in_contact=int(m.in_contact), peak=float(m.peak),
@@ -113,7 +134,8 @@ def main(args=None):  # pragma: no cover - needs ROS 2
             pads = {}
             for f, p in self.latest.items():
                 pads[f] = None if p is None else {**p, "age_ms": (now - p["_t"]) * 1000.0}
-            self.writer.write(now, pads, list(m.name), list(m.position), list(m.velocity), list(m.effort))
+            self.writer.write(now, pads, list(m.name), list(m.position), list(m.velocity), list(m.effort),
+                              self.step)
 
         def destroy_node(self):
             self.writer.close()

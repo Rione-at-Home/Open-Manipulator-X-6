@@ -16,6 +16,8 @@
   <exec_depend>joy</exec_depend>
   <exec_depend>python3-pyqt5</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>v4l2_camera</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
 
   <exec_depend>flexigrasp_msgs</exec_depend>
 

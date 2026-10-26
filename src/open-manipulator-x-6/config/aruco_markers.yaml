@@ -1,0 +1,17 @@
+# Workspace markers seen by the world camera (C920).
+aruco_detector:
+  ros__parameters:
+    image_topic: /world_cam/image_raw
+    camera_info_topic: /world_cam/camera_info
+    dictionary: DICT_4X4_50
+    marker_ids: [0, 1, 2, 3]
+    marker_names: [base, bottle_start, bottle_place, bottle]
+    marker_sizes_mm: [40.0, 40.0, 40.0, 30.0]   # MEASURE the printed black squares and put the real sizes here
+    # Base marker centre in the robot frame (origin on joint 1's axis at the arm's mounting
+    # surface; x forward, y left, z up). Fill in your measurements.
+    base_offset_mm: [0.0, 0.0, 0.0]
+    base_yaw_deg: -90.0                        # -90 = the printed arrow points to the robot's front
+    tolerance_mm: 10.0
+    refs_file: ~/Open-Manipulator-X-6/aruco_refs.yaml
+    log_file: ~/flexigrasp_logs/aruco_snapshots.csv
+    process_hz: 15.0

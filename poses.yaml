@@ -1,0 +1,130 @@
+version: 1
+poses:
+  home:
+    names:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+    - joint5
+    - wrist_rotate
+    positions:
+    - -1.60608
+    - -1.79783
+    - 1.15509
+    - 1.20417
+    - 0.02761
+    - -0.03068
+    saved: '2026-10-21T16:22:37'
+  pre_grasp:
+    names:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+    - joint5
+    - wrist_rotate
+    positions:
+    - -1.60301
+    - -1.19957
+    - 0.46633
+    - 0.44332
+    - 0.03068
+    - -0.03682
+    saved: '2026-10-21T16:24:41'
+  grasp:
+    names:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+    - joint5
+    - wrist_rotate
+    positions:
+    - -1.59841
+    - -0.8713
+    - 0.70103
+    - -0.10278
+    - 0.03068
+    - -0.03221
+    saved: '2026-10-21T16:27:06'
+  lift:
+    names:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+    - joint5
+    - wrist_rotate
+    positions:
+    - -1.59841
+    - -0.90965
+    - -0.68876
+    - -0.10891
+    - 0.03068
+    - -0.03221
+    saved: '2026-10-21T16:27:40'
+  spin_90:
+    names:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+    - joint5
+    - wrist_rotate
+    positions:
+    - -1.59994
+    - -0.94186
+    - -0.69796
+    - -0.11351
+    - 0.02915
+    - -1.43274
+    saved: '2026-10-21T16:28:13'
+  tilt_45:
+    names:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+    - joint5
+    - wrist_rotate
+    positions:
+    - -1.59687
+    - -1.00016
+    - -0.72557
+    - -0.12885
+    - -0.56297
+    - -1.43581
+    saved: '2026-10-21T16:28:48'
+  tilt_90:
+    names:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+    - joint5
+    - wrist_rotate
+    positions:
+    - -1.59841
+    - -1.11214
+    - -0.77313
+    - -0.15033
+    - -1.45421
+    - -1.43734
+    saved: '2026-10-21T16:29:47'
+  place:
+    names:
+    - joint1
+    - joint2
+    - joint3
+    - joint4
+    - joint5
+    - wrist_rotate
+    positions:
+    - -1.59381
+    - -0.28379
+    - -0.67035
+    - 0.96027
+    - 0.1672
+    - -0.03068
+    saved: '2026-10-21T16:31:10'

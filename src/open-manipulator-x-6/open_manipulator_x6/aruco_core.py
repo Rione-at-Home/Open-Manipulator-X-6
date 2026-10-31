@@ -278,6 +278,25 @@ class ArucoTracker:
         T = T_robot_cam @ Tm
         return T[:3, 3] * 1000.0, yaw_deg(T)
 
+    def camera_pose(self, name: str, now: float) -> Optional[Tuple[np.ndarray, float]]:
+        """(xyz in mm, straight-line distance in mm) from the camera: x right in the image, y down,
+        z out of the lens. Needs only the camera calibration (no base marker)."""
+        T = self._median_T(name, now)
+        if T is None:
+            return None
+        p = T[:3, 3] * 1000.0
+        return p, float(np.linalg.norm(p))
+
+    def snapshot_row_camera(self, label: str, stamp: str, now: float) -> dict:
+        row = {"time": stamp, "label": label, "frame": "camera"}
+        for name in self.by_name:
+            pose = self.camera_pose(name, now)
+            row[f"{name}_seen"] = int(self.seen(name, now))
+            vals = list(pose[0]) + [pose[1]] if pose else [""] * 4
+            for k, v in zip(("x_mm", "y_mm", "z_mm", "dist_mm"), vals):
+                row[f"{name}_{k}"] = "" if v == "" else round(float(v), 1)
+        return row
+
     def _offset_robot_mm(self, target: str, now: float) -> Optional[np.ndarray]:
         """Bottle position minus target-marker position, robot frame (mm). Needs a locked base."""
         if self.lock is None:

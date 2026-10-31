@@ -1,7 +1,7 @@
 """
-Checkerboard camera calibration without ROS: board detection, view coverage with plain-language
-guidance, calibration with outlier removal, sanity checks, and the camera_info YAML that ROS
-camera drivers (v4l2_camera, usb_cam) load through camera_info_url.
+Checkerboard camera calibration without ROS: fast board detection, guided target poses (an outline
+on the video that the board is lined up with), calibration with outlier removal, sanity checks,
+and the camera_info YAML that ROS camera drivers (v4l2_camera, usb_cam) load via camera_info_url.
 
 Board size is given in INNER corners: a board of 9 x 7 squares has 8 x 6 inner corners.
 """
@@ -28,23 +28,42 @@ class Board:
         return g
 
 
-def detect(gray: np.ndarray, board: Board) -> Optional[np.ndarray]:
-    """Inner corners (N x 2, float32) with sub-pixel accuracy, or None."""
+_SUBPIX = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.01)
+
+
+def _find(gray: np.ndarray, board: Board) -> Optional[np.ndarray]:
     size = (board.cols, board.rows)
     if hasattr(cv2, "findChessboardCornersSB"):
         ok, c = cv2.findChessboardCornersSB(gray, size, cv2.CALIB_CB_NORMALIZE_IMAGE)
-        if ok:
-            return c.reshape(-1, 2).astype(np.float32)
-        return None
-    ok, c = cv2.findChessboardCorners(gray, size, cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE)
-    if not ok:
-        return None
-    c = cv2.cornerSubPix(gray, c, (5, 5), (-1, -1),
-                         (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 40, 0.01))
+    else:
+        ok, c = cv2.findChessboardCorners(gray, size, cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE)
+    return c.reshape(-1, 2).astype(np.float32) if ok else None
+
+
+def detect(gray: np.ndarray, board: Board, max_side: int = 640) -> Optional[np.ndarray]:
+    """Inner corners (N x 2, float32, full-resolution pixels) with sub-pixel accuracy, or None.
+    Large images are searched at reduced size (fast), then the corners are refined at full size."""
+    h, w = gray.shape[:2]
+    scale = min(1.0, max_side / float(max(w, h)))
+    if scale < 1.0:
+        small = cv2.resize(gray, (int(round(w * scale)), int(round(h * scale))), interpolation=cv2.INTER_AREA)
+        c = _find(small, board)
+        if c is None:
+            return None
+        c = (c / scale).reshape(-1, 1, 2).astype(np.float32)
+    else:
+        c = _find(gray, board)
+        if c is None:
+            return None
+        c = c.reshape(-1, 1, 2)
+    # refinement window about a third of a square, measured at full resolution
+    sq = float(np.median(np.linalg.norm(np.diff(c.reshape(board.rows, board.cols, 2), axis=1), axis=2)))
+    win = int(max(3, min(11, sq / 3)))
+    c = cv2.cornerSubPix(gray, c, (win, win), (-1, -1), _SUBPIX)
     return c.reshape(-1, 2).astype(np.float32)
 
 
-# ---- view description and coverage --------------------------------------------------------------
+# ---- describing a board's place in the image ----------------------------------------------------
 @dataclass
 class View:
     cx: float          # board centre, fraction of image width (0 = left)
@@ -52,9 +71,6 @@ class View:
     size: float        # sqrt(board area / image area)
     yaw: float         # >0: left edge nearer the camera (looks longer); <0: right edge nearer
     pitch: float       # >0: top edge nearer; <0: bottom edge nearer
-
-    def vec(self) -> np.ndarray:
-        return np.array([self.cx, self.cy, self.size * 1.5, self.yaw * 2.0, self.pitch * 2.0])
 
 
 def outer_quad(corners: np.ndarray, board: Board) -> np.ndarray:
@@ -64,79 +80,59 @@ def outer_quad(corners: np.ndarray, board: Board) -> np.ndarray:
     c, n = corners, board.cols
     quad = np.array([c[0], c[n - 1], c[-1], c[-n]], dtype=np.float64)
     centre = quad.mean(axis=0)
-    ang = np.arctan2(quad[:, 1] - centre[1], quad[:, 0] - centre[0])   # image y points down
-    quad = quad[np.argsort(ang)]                 # from -pi: TL, TR, BR, BL for a mildly rotated board
-    tl = int(np.argmin(quad.sum(axis=1)))        # top-left has the smallest x + y
-    return np.roll(quad, -tl, axis=0)
+    quad = quad[np.argsort(np.arctan2(quad[:, 1] - centre[1], quad[:, 0] - centre[0]))]
+    return np.roll(quad, -int(np.argmin(quad.sum(axis=1))), axis=0)
 
 
-def describe(corners: np.ndarray, board: Board, w: int, h: int) -> View:
-    tl, tr, br, bl = outer_quad(corners, board)
+def view_of_quad(quad: np.ndarray, w: int, h: int) -> View:
+    tl, tr, br, bl = quad
     left, right = np.linalg.norm(tl - bl), np.linalg.norm(tr - br)
     top, bottom = np.linalg.norm(tl - tr), np.linalg.norm(bl - br)
-    hull = cv2.convexHull(corners.astype(np.float32))
-    area = cv2.contourArea(hull)
-    centre = corners.mean(axis=0)
-    return View(float(centre[0] / w), float(centre[1] / h), float(math.sqrt(area / (w * h))),
+    area = abs(cv2.contourArea(quad.astype(np.float32)))
+    c = quad.mean(axis=0)
+    return View(float(c[0] / w), float(c[1] / h), float(math.sqrt(area / (w * h))),
                 float((left - right) / (left + right)), float((top - bottom) / (top + bottom)))
 
 
-TILT = 0.06            # |yaw| or |pitch| above this counts as tilted (roughly 15 deg or more)
+def describe(corners: np.ndarray, board: Board, w: int, h: int) -> View:
+    return view_of_quad(outer_quad(corners, board), w, h)
+
+
+# ---- coverage bins (used for the report) ---------------------------------------------------------
+TILT = 0.06             # |yaw| or |pitch| above this counts as tilted (roughly 15 deg or more)
 NEAR, FAR = 0.45, 0.28  # size thresholds
 
 POSITIONS = [f"{v}-{u}" for v in ("top", "middle", "bottom") for u in ("left", "centre", "right")]
 DISTANCES = ["near", "middle", "far"]
 TILTS = ["left edge nearer", "right edge nearer", "top edge nearer", "bottom edge nearer"]
 
-HOW = {
-    # positions
-    **{p: f"Move the board (or the camera) so the board sits in the {p.replace('-', ' ')} "
-          f"of the image, all corners still inside." for p in POSITIONS},
-    "near": "Bring the camera closer until the board fills most of the image (about half the "
-            "image width or more), with every corner still inside.",
-    "middle": "Hold the board at a medium distance: it should cover roughly a third of the image width.",
-    "far": "Move the camera back until the board is small, about a quarter of the image width "
-           "(as far as the corners are still detected).",
-    "left edge nearer": "Turn the board so its LEFT edge comes toward the camera (or swing the "
-                        "camera to the board's left), about 30-45 degrees.",
-    "right edge nearer": "Turn the board so its RIGHT edge comes toward the camera (or swing the "
-                         "camera to the board's right), about 30-45 degrees.",
-    "top edge nearer": "Tip the board so its TOP edge comes toward the camera (or raise the camera "
-                       "and look down at it), about 30-45 degrees.",
-    "bottom edge nearer": "Tip the board so its BOTTOM edge comes toward the camera (or lower the "
-                          "camera and look up at it), about 30-45 degrees.",
-}
-
 
 def position_bin(v: View) -> str:
-    u = min(2, int(v.cx * 3))
-    r = min(2, int(v.cy * 3))
-    return POSITIONS[r * 3 + u]
+    return POSITIONS[min(2, int(v.cy * 3)) * 3 + min(2, int(v.cx * 3))]
 
 
 def distance_bin(v: View) -> str:
     return "near" if v.size >= NEAR else "far" if v.size <= FAR else "middle"
 
 
-def tilt_bins(v: View) -> List[str]:
+def tilt_bins(v: View, threshold: float = TILT) -> List[str]:
     out = []
-    if v.yaw > TILT:
+    if v.yaw > threshold:
         out.append("left edge nearer")
-    if v.yaw < -TILT:
+    if v.yaw < -threshold:
         out.append("right edge nearer")
-    if v.pitch > TILT:
+    if v.pitch > threshold:
         out.append("top edge nearer")
-    if v.pitch < -TILT:
+    if v.pitch < -threshold:
         out.append("bottom edge nearer")
     return out
 
 
 @dataclass
 class Coverage:
-    """How many captured views fall in each bin, and what to do next."""
-    need_pos: int = 2       # views wanted per image region
-    need_dist: int = 4
-    need_tilt: int = 3
+    need_pos: int = 1
+    need_dist: int = 2
+    need_tilt: int = 2
     counts: Dict[str, int] = field(default_factory=dict)
 
     def add(self, v: View):
@@ -146,19 +142,119 @@ class Coverage:
     def need(self, b: str) -> int:
         return self.need_pos if b in POSITIONS else self.need_dist if b in DISTANCES else self.need_tilt
 
-    def done(self, b: str) -> bool:
-        return self.counts.get(b, 0) >= self.need(b)
-
     def missing(self) -> List[str]:
-        # tilts first (they fix the focal length), then distances, then image regions
-        return [b for b in TILTS + DISTANCES + POSITIONS if not self.done(b)]
+        return [b for b in TILTS + DISTANCES + POSITIONS if self.counts.get(b, 0) < self.need(b)]
 
-    def next_hint(self) -> str:
-        m = self.missing()
-        return HOW[m[0]] if m else "Coverage complete. Press Calibrate."
 
-    def ready(self) -> bool:
-        return not self.missing()
+# ---- guided targets ------------------------------------------------------------------------------
+BOARD_ASPECT = 7.0 / 5.0     # width / height of the inner-corner grid (8 x 6 corners = 7 x 5 squares)
+
+
+@dataclass
+class Target:
+    text: str                       # what the view should look like, in words
+    cx: float                       # centre, fraction of width / height
+    cy: float
+    width: float                    # board width as a fraction of image width (flat board)
+    tilt: Optional[str] = None      # one of TILTS, or None for facing the camera
+
+    def quad(self, w: int, h: int, board_aspect: float = BOARD_ASPECT) -> np.ndarray:
+        """Outline in pixels, TL, TR, BR, BL. A tilted board is drawn as a trapezoid: the nearer
+        edge longer, and the board foreshortened along the tilt."""
+        bw = self.width * w
+        bh = bw / board_aspect
+        k, f = 1.16, 0.85                 # near/far edge ratio about 1.35; foreshortening
+        hl = hr = bh / 2
+        wt = wb = bw / 2
+        if self.tilt == "left edge nearer":
+            hl, hr, wt, wb = hl * k, hr / k, wt * f, wb * f
+        elif self.tilt == "right edge nearer":
+            hl, hr, wt, wb = hl / k, hr * k, wt * f, wb * f
+        elif self.tilt == "top edge nearer":
+            wt, wb, hl, hr = wt * k, wb / k, hl * f, hr * f
+        elif self.tilt == "bottom edge nearer":
+            wt, wb, hl, hr = wt / k, wb * k, hl * f, hr * f
+        x, y = self.cx * w, self.cy * h
+        if self.tilt in ("left edge nearer", "right edge nearer"):
+            w_half = wt
+            return np.array([[x - w_half, y - hl], [x + w_half, y - hr],
+                             [x + w_half, y + hr], [x - w_half, y + hl]])
+        h_half = hl
+        return np.array([[x - wt, y - h_half], [x + wt, y - h_half],
+                         [x + wb, y + h_half], [x - wb, y + h_half]])
+
+
+def default_targets() -> List[Target]:
+    """14 poses that between them cover the image, three distances and four tilts."""
+    t = [Target("Large, in the centre, facing the camera", 0.50, 0.50, 0.60),
+         Target("Small, in the centre, facing the camera", 0.50, 0.50, 0.30),
+         Target("Top-left corner of the image, facing the camera", 0.24, 0.27, 0.36),
+         Target("Top-right corner of the image, facing the camera", 0.76, 0.27, 0.36),
+         Target("Bottom-right corner of the image, facing the camera", 0.76, 0.73, 0.36),
+         Target("Bottom-left corner of the image, facing the camera", 0.24, 0.73, 0.36),
+         Target("Centre, LEFT edge turned toward the camera", 0.50, 0.50, 0.45, TILTS[0]),
+         Target("Centre, RIGHT edge turned toward the camera", 0.50, 0.50, 0.45, TILTS[1]),
+         Target("Centre, TOP edge tipped toward the camera", 0.50, 0.50, 0.45, TILTS[2]),
+         Target("Centre, BOTTOM edge tipped toward the camera", 0.50, 0.50, 0.45, TILTS[3]),
+         Target("Left side, RIGHT edge turned toward the camera", 0.30, 0.50, 0.38, TILTS[1]),
+         Target("Right side, LEFT edge turned toward the camera", 0.70, 0.50, 0.38, TILTS[0]),
+         Target("Top, BOTTOM edge tipped toward the camera", 0.50, 0.28, 0.38, TILTS[3]),
+         Target("Bottom, TOP edge tipped toward the camera", 0.50, 0.72, 0.38, TILTS[2])]
+    return t
+
+
+def fit_target(t: Target, w: int, h: int) -> np.ndarray:
+    """Target outline, shrunk if needed so it stays inside the image (for very wide/tall images)."""
+    q = t.quad(w, h)
+    for _ in range(20):
+        if q[:, 0].min() >= 0.02 * w and q[:, 0].max() <= 0.98 * w and \
+           q[:, 1].min() >= 0.02 * h and q[:, 1].max() <= 0.98 * h:
+            break
+        c = q.mean(axis=0)
+        q = c + (q - c) * 0.93
+    return q
+
+
+def match_error(det_quad: np.ndarray, tgt_quad: np.ndarray, w: int, h: int) -> float:
+    """Mean corner distance between the board's outline and the target, as a fraction of the
+    image diagonal."""
+    return float(np.mean(np.linalg.norm(det_quad - tgt_quad, axis=1)) / math.hypot(w, h))
+
+
+TILT_HOW = {
+    TILTS[0]: "turn the board so its LEFT edge comes toward the camera",
+    TILTS[1]: "turn the board so its RIGHT edge comes toward the camera",
+    TILTS[2]: "tip the board so its TOP edge comes toward the camera",
+    TILTS[3]: "tip the board so its BOTTOM edge comes toward the camera",
+}
+
+
+def hint(det: View, tgt: View, target: Target, matched_tilt: bool) -> str:
+    """The single most useful correction, in words."""
+    dx, dy = tgt.cx - det.cx, tgt.cy - det.cy
+    ratio = det.size / tgt.size
+    if abs(dx) > 0.12 or abs(dy) > 0.12:
+        pass  # fall through to position below
+    elif ratio < 0.85:
+        return "Bring the camera closer to the board (the board should look bigger)."
+    elif ratio > 1.18:
+        return "Move the camera back from the board (the board should look smaller)."
+    elif target.tilt and not matched_tilt:
+        return TILT_HOW[target.tilt].capitalize() + ", about 30-40 degrees."
+    elif not target.tilt and tilt_bins(det, 0.05):
+        return "Face the board straight at the camera (no tilt)."
+    parts = []
+    if abs(dx) > 0.03:
+        parts.append("toward the RIGHT of the image" if dx > 0 else "toward the LEFT of the image")
+    if abs(dy) > 0.03:
+        parts.append("DOWN in the image" if dy > 0 else "UP in the image")
+    if parts:
+        return "Shift the board " + " and ".join(parts) + "."
+    if ratio < 0.95:
+        return "Slightly closer."
+    if ratio > 1.07:
+        return "Slightly further."
+    return "Nearly there: match the outline's shape and hold still."
 
 
 @dataclass
@@ -166,54 +262,92 @@ class Sample:
     corners: np.ndarray
     view: View
     image: Optional[np.ndarray] = None     # kept so the views can be saved and re-run
+    target: int = -1
 
 
-class Collector:
-    """Decides which live detections to keep: the board must be steady, and the view must differ
-    from the ones already captured."""
+class TargetSession:
+    """Walks through the targets: a view is captured when the board matches the current target's
+    outline closely and is steady for a moment."""
 
-    def __init__(self, board: Board, still_px: float = 1.5, still_frames: int = 3,
-                 min_novelty: float = 0.12, max_samples: int = 60):
+    def __init__(self, board: Board, targets: Optional[List[Target]] = None,
+                 match_tol: float = 0.045, still_frac: float = 0.003, still_frames: int = 2):
         self.board = board
-        self.still_px, self.still_frames = still_px, still_frames
-        self.min_novelty, self.max_samples = min_novelty, max_samples
+        self.targets = targets or default_targets()
+        self.match_tol, self.still_frac, self.still_frames = match_tol, still_frac, still_frames
         self.samples: List[Sample] = []
-        self.coverage = Coverage()
+        self.status: List[str] = ["todo"] * len(self.targets)     # todo / done / skipped
+        self.index = 0
         self.size: Optional[Tuple[int, int]] = None
         self._prev: Optional[np.ndarray] = None
         self._steady = 0
+        self.last_error: Optional[float] = None
+        self.last_hint = ""
 
     def reset(self):
-        self.__init__(self.board, self.still_px, self.still_frames, self.min_novelty, self.max_samples)
+        self.__init__(self.board, self.targets, self.match_tol, self.still_frac, self.still_frames)
 
-    def novelty(self, v: View) -> float:
-        if not self.samples:
-            return float("inf")
-        return float(min(np.linalg.norm(v.vec() - s.view.vec()) for s in self.samples))
+    @property
+    def finished(self) -> bool:
+        return self.index >= len(self.targets)
+
+    @property
+    def current(self) -> Optional[Target]:
+        return None if self.finished else self.targets[self.index]
+
+    def _advance(self):
+        self.index += 1
+        while self.index < len(self.targets) and self.status[self.index] != "todo":
+            self.index += 1
+        self._steady = 0
+
+    def skip(self):
+        if not self.finished:
+            self.status[self.index] = "skipped"
+            self._advance()
+
+    def closeness(self) -> float:
+        """0..1 for the GUI bar: 1 = within tolerance."""
+        if self.last_error is None:
+            return 0.0
+        return float(max(0.0, min(1.0, 1.0 - (self.last_error - self.match_tol) / (4 * self.match_tol))))
 
     def offer(self, corners: Optional[np.ndarray], w: int, h: int,
               image: Optional[np.ndarray] = None) -> str:
-        """Feed one detection (None = no board). Returns a short status for the GUI."""
         if self.size is not None and self.size != (w, h):
             self.reset()
         self.size = (w, h)
+        self.last_error = None
+        if self.finished:
+            self.last_hint = "All targets done. Press Calibrate."
+            return self.last_hint
         if corners is None:
             self._prev, self._steady = None, 0
-            return "No board found: show the whole board, flat and well lit."
+            self.last_hint = "No board found: show the whole board, flat and well lit."
+            return self.last_hint
+        t = self.current
+        dq = outer_quad(corners, self.board)
+        tq = fit_target(t, w, h)
+        det, tgt = view_of_quad(dq, w, h), view_of_quad(tq, w, h)
+        self.last_error = match_error(dq, tq, w, h)
+        tilt_ok = t.tilt is None or t.tilt in tilt_bins(det, TILT * 0.8)
         moved = np.inf if self._prev is None else float(np.max(np.linalg.norm(corners - self._prev, axis=1)))
         self._prev = corners
-        self._steady = self._steady + 1 if moved <= self.still_px else 0
-        if self._steady < self.still_frames:
-            return "Board found: hold still..."
-        if len(self.samples) >= self.max_samples:
-            return f"{self.max_samples} views collected (the maximum). Press Calibrate."
-        v = describe(corners, self.board, w, h)
-        if self.novelty(v) < self.min_novelty:
-            return "Already have a view like this: move to a new position, distance or tilt."
-        self.samples.append(Sample(corners.copy(), v, None if image is None else image.copy()))
-        self.coverage.add(v)
-        self._steady = 0
-        return f"Captured view {len(self.samples)}."
+        steady = moved <= self.still_frac * math.hypot(w, h)
+        self._steady = self._steady + 1 if steady else 0
+        if self.last_error <= self.match_tol and tilt_ok:
+            if self._steady >= self.still_frames:
+                self.samples.append(Sample(corners.copy(), det, None if image is None else image.copy(),
+                                           self.index))
+                self.status[self.index] = "done"
+                n = self.index + 1
+                self._advance()
+                self.last_hint = f"Captured target {n}. " + (
+                    "All targets done. Press Calibrate." if self.finished else "Next outline shown.")
+                return self.last_hint
+            self.last_hint = "Matched: hold still..."
+            return self.last_hint
+        self.last_hint = hint(det, tgt, t, tilt_ok)
+        return self.last_hint
 
 
 # ---- calibration ----------------------------------------------------------------------------------
@@ -232,20 +366,26 @@ class Result:
         return math.degrees(2 * math.atan(self.size[0] / (2 * self.K[0, 0])))
 
     def checks(self) -> List[Tuple[str, str, str]]:
-        """(level, name, text) with level in good / warn / bad."""
+        """(level, name, text) with level in good / warn / bad. Only 'bad' blocks saving."""
         w, h = self.size
         fx, fy, cx, cy = self.K[0, 0], self.K[1, 1], self.K[0, 2], self.K[1, 2]
         out = []
         lvl = "good" if self.rms < 0.5 else "warn" if self.rms < 1.0 else "bad"
         out.append((lvl, "Reprojection error", f"{self.rms:.2f} px (good below 0.5)"))
-        dx, dy = abs(cx - w / 2) / w, abs(cy - h / 2) / h
-        lvl = "good" if max(dx, dy) < 0.06 else "warn" if max(dx, dy) < 0.12 else "bad"
-        out.append((lvl, "Image centre", f"({cx:.0f}, {cy:.0f}); expected near ({w / 2:.0f}, {h / 2:.0f})"))
+        off = max(abs(cx - w / 2) / w, abs(cy - h / 2) / h)
+        if off < 0.06:
+            out.append(("good", "Image centre", f"({cx:.0f}, {cy:.0f}), near the middle"))
+        elif off < 0.25:
+            out.append(("warn", "Image centre",
+                        f"({cx:.0f}, {cy:.0f}), away from the middle ({w / 2:.0f}, {h / 2:.0f}). "
+                        f"Normal for a cropped camera mode; check with the ruler test"))
+        else:
+            out.append(("bad", "Image centre", f"({cx:.0f}, {cy:.0f}) is implausibly far from the middle"))
         r = abs(fx - fy) / fx
         lvl = "good" if r < 0.02 else "warn" if r < 0.05 else "bad"
         out.append((lvl, "fx vs fy", f"{fx:.0f} vs {fy:.0f} (should match within 2%)"))
         out.append(("good" if 40 <= self.hfov_deg <= 100 else "warn", "Horizontal field of view",
-                    f"{self.hfov_deg:.0f} deg (ordinary webcams: about 55-80)"))
+                    f"{self.hfov_deg:.0f} deg (ordinary webcams: about 55-80; narrower in cropped modes)"))
         return out
 
     def ok(self) -> bool:
@@ -257,14 +397,14 @@ def calibrate(corner_sets: List[np.ndarray], board: Board, size: Tuple[int, int]
     """Calibrate (k1, k2, p1, p2; k3 fixed at 0, which suits ordinary webcams), then drop views
     whose error is far above the rest and calibrate once more."""
     if len(corner_sets) < 8:
-        raise ValueError(f"only {len(corner_sets)} views; collect at least 8 (20+ recommended)")
+        raise ValueError(f"only {len(corner_sets)} views; collect at least 8 (12+ recommended)")
     obj = board.object_points()
     flags = cv2.CALIB_FIX_K3
 
     def run(idx):
-        o = [obj] * len(idx)
-        img = [corner_sets[i].reshape(-1, 1, 2) for i in idx]
-        rms, K, D, rv, tv = cv2.calibrateCamera(o, img, size, None, None, flags=flags)
+        rms, K, D, rv, tv = cv2.calibrateCamera([obj] * len(idx),
+                                                [corner_sets[i].reshape(-1, 1, 2) for i in idx],
+                                                size, None, None, flags=flags)
         errs = []
         for k, i in enumerate(idx):
             proj, _ = cv2.projectPoints(obj, rv[k], tv[k], K, D)
@@ -278,12 +418,9 @@ def calibrate(corner_sets: List[np.ndarray], board: Board, size: Tuple[int, int]
     dropped = [i for i in idx if i not in keep]
     if dropped and len(keep) >= 8:
         rms, K, D, errs2 = run(keep)
-        per_view = [float("nan")] * len(idx)
+        per_view = list(errs)
         for i, e in zip(keep, errs2):
             per_view[i] = e
-        for i, e in zip(idx, errs):
-            if i in dropped:
-                per_view[i] = e
     else:
         dropped, keep, per_view = [], idx, errs
     return Result(K, D.reshape(-1)[:5], size, float(rms), per_view, len(keep), dropped)

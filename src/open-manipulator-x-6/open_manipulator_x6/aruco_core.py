@@ -12,6 +12,13 @@ Frames
                    (= marker +y) pointing to the robot's front (+x), the marker's x-axis points to
                    the robot's right (-y), i.e. base_yaw_deg = -90 (the default).
 
+Base lock
+- The camera and the base marker do not move during a test, so the base pose is averaged over a
+  few seconds and frozen (lock_base). Marker positions then use only each marker's position in the
+  camera frame, which is much steadier than a single marker's orientation.
+- Bottle references and deviations are stored and measured in the robot frame, so they need a
+  locked base and stay valid if the camera is moved and the base locked again.
+
 Works with both OpenCV ArUco APIs: the old one (4.5, e.g. Ubuntu 22.04 / ROS Humble) and the new
 one (4.7+).
 """
@@ -103,6 +110,30 @@ def yaw_deg(T: np.ndarray) -> float:
     return math.degrees(math.atan2(T[1, 0], T[0, 0]))
 
 
+def rot_angle_deg(Ra: np.ndarray, Rb: np.ndarray) -> float:
+    """Angle of the rotation between two rotation matrices (degrees)."""
+    c = (np.trace(Ra.T @ Rb) - 1.0) / 2.0
+    return math.degrees(math.acos(max(-1.0, min(1.0, c))))
+
+
+def mean_rotation(Rs: List[np.ndarray]) -> np.ndarray:
+    """Chordal mean of rotation matrices: the rotation closest to their element-wise average."""
+    U, _, Vt = np.linalg.svd(np.sum(Rs, axis=0))
+    R = U @ Vt
+    if np.linalg.det(R) < 0:              # keep a proper rotation
+        U[:, -1] *= -1
+        R = U @ Vt
+    return R
+
+
+@dataclass
+class BaseLock:
+    T_cam_base: np.ndarray        # frozen base pose in the camera frame
+    samples: int                  # frames used
+    spread_mm: float              # median distance of the samples from the locked position
+    spread_deg: float             # median angle of the samples from the locked rotation
+
+
 # ---- tracker ------------------------------------------------------------------------------------
 @dataclass
 class MarkerSpec:
@@ -118,6 +149,11 @@ REFERENCE_TARGETS = ("bottle_start", "bottle_place")   # bottle position is chec
 
 
 class ArucoTracker:
+    LOCK_WINDOW_S = 3.0          # base frames averaged by lock_base
+    LOCK_MIN_SAMPLES = 15
+    LOCK_OUTLIER_DEG = 8.0       # base frames further than this from the mean rotation are dropped
+    MOVED_MM, MOVED_DEG = 8.0, 3.0   # live base this far from the lock -> "base moved?" warning
+
     def __init__(self, markers: List[MarkerSpec] = None, dictionary: str = "DICT_4X4_50",
                  base_offset_mm=(0.0, 0.0, 0.0), base_yaw_deg: float = -90.0,
                  history: int = 10, stale_s: float = 0.5, max_reproj_px: float = 3.0):
@@ -136,8 +172,10 @@ class ArucoTracker:
         self.stale_s, self.max_reproj_px = stale_s, max_reproj_px
         self.last: Dict[str, Tuple[float, np.ndarray]] = {}           # name -> (t, T_cam_marker)
         self.hist: Dict[str, deque] = {n: deque(maxlen=history) for n in self.by_name}
-        self.references: Dict[str, np.ndarray] = {}                    # target -> bottle pos (mm) in target frame
+        self.hist["base"] = deque(maxlen=max(history, 120))          # enough frames for lock_base
+        self.references: Dict[str, np.ndarray] = {}   # target -> bottle minus target (mm), robot frame
         self.last_corners: Dict[int, np.ndarray] = {}
+        self.lock: Optional[BaseLock] = None
 
     # -- camera --
     def set_camera(self, K, D):
@@ -180,44 +218,101 @@ class ArucoTracker:
         T[:3, 3] = np.median(np.array([R[:3, 3] for R in recent]), axis=0)
         return T
 
+    # -- base lock --
+    def lock_base(self, now: float) -> BaseLock:
+        """Average the base pose over the last LOCK_WINDOW_S seconds and freeze it."""
+        recent = [T for (t, T) in self.hist["base"] if now - t <= self.LOCK_WINDOW_S]
+        if len(recent) < self.LOCK_MIN_SAMPLES:
+            raise ValueError(f"base marker seen in only {len(recent)} recent frames; keep it in "
+                             f"view and still for {self.LOCK_WINDOW_S:.0f} s, then try again")
+        R = mean_rotation([T[:3, :3] for T in recent])
+        kept = [T for T in recent if rot_angle_deg(R, T[:3, :3]) <= self.LOCK_OUTLIER_DEG]
+        if len(kept) < self.LOCK_MIN_SAMPLES:
+            raise ValueError("base orientation is too unsteady to lock; check lighting and that "
+                             "the base marker is flat and fully visible")
+        R = mean_rotation([T[:3, :3] for T in kept])
+        p = np.median(np.array([T[:3, 3] for T in kept]), axis=0)
+        T = np.eye(4)
+        T[:3, :3], T[:3, 3] = R, p
+        self.lock = BaseLock(
+            T, len(kept),
+            float(np.median([np.linalg.norm(K[:3, 3] - p) for K in kept]) * 1000.0),
+            float(np.median([rot_angle_deg(R, K[:3, :3]) for K in kept])))
+        return self.lock
+
+    def unlock_base(self):
+        self.lock = None
+
+    @property
+    def locked(self) -> bool:
+        return self.lock is not None
+
+    def base_moved(self, now: float) -> Optional[Tuple[float, float]]:
+        """(mm, deg) between the live base pose and the lock, if beyond the warning limits."""
+        if self.lock is None:
+            return None
+        live = self._median_T("base", now)
+        if live is None:
+            return None
+        recent = [T[:3, :3] for (t, T) in self.hist["base"] if now - t <= 1.0]
+        R = mean_rotation(recent) if recent else live[:3, :3]
+        d_mm = float(np.linalg.norm(live[:3, 3] - self.lock.T_cam_base[:3, 3]) * 1000.0)
+        d_deg = rot_angle_deg(R, self.lock.T_cam_base[:3, :3])
+        return (d_mm, d_deg) if d_mm > self.MOVED_MM or d_deg > self.MOVED_DEG else None
+
     # -- outputs --
     def robot_pose(self, name: str, now: float) -> Optional[Tuple[np.ndarray, float]]:
-        """(xyz in mm, yaw in degrees) in the robot frame; None if it or the base is not visible."""
-        Tb, Tm = self._median_T("base", now), self._median_T(name, now)
-        if Tb is None or Tm is None:
+        """(xyz in mm, yaw in degrees) in the robot frame; None if it (or, when unlocked, the base)
+        is not visible. With a locked base the position uses only the marker's camera-frame
+        position, not its orientation."""
+        Tm = self._median_T(name, now)
+        if Tm is None:
             return None
-        T = self.T_robot_base @ inv_T(Tb) @ Tm
+        if self.lock is not None:
+            T_robot_cam = self.T_robot_base @ inv_T(self.lock.T_cam_base)
+        else:
+            Tb = self._median_T("base", now)
+            if Tb is None:
+                return None
+            T_robot_cam = self.T_robot_base @ inv_T(Tb)
+        T = T_robot_cam @ Tm
         return T[:3, 3] * 1000.0, yaw_deg(T)
 
-    def relative_mm(self, frame: str, name: str, now: float) -> Optional[np.ndarray]:
-        """Position of marker `name` in marker `frame`'s frame (mm). Needs no base marker."""
-        Tf, Tm = self._median_T(frame, now), self._median_T(name, now)
-        if Tf is None or Tm is None:
+    def _offset_robot_mm(self, target: str, now: float) -> Optional[np.ndarray]:
+        """Bottle position minus target-marker position, robot frame (mm). Needs a locked base."""
+        if self.lock is None:
             return None
-        return (inv_T(Tf) @ Tm)[:3, 3] * 1000.0
+        b, t = self.robot_pose("bottle", now), self.robot_pose(target, now)
+        if b is None or t is None:
+            return None
+        return b[0] - t[0]
 
     def set_reference(self, target: str, now: float) -> np.ndarray:
-        """Remember where the bottle marker sits relative to `target` right now (bottle placed
-        correctly by hand). Later deviations are measured from this."""
+        """Remember where the bottle sits relative to `target` right now (bottle placed correctly
+        by hand). Later deviations are measured from this. Needs a locked base."""
         if target not in REFERENCE_TARGETS:
             raise ValueError(f"target must be one of {REFERENCE_TARGETS}")
-        p = self.relative_mm(target, "bottle", now)
+        if self.lock is None:
+            raise ValueError("lock the base first")
+        p = self._offset_robot_mm(target, now)
         if p is None:
             raise ValueError(f"need both '{target}' and 'bottle' markers in view")
         self.references[target] = p
         return p
 
     def deviation(self, target: str, now: float) -> Optional[Tuple[float, float, float]]:
-        """(dx, dy, distance) in mm, in the target marker's plane, from the saved reference."""
+        """(dx, dy, distance) in mm along the robot's x (forward) and y (left), from the saved
+        reference. None without a locked base, a reference, or both markers in view."""
         ref = self.references.get(target)
-        p = self.relative_mm(target, "bottle", now)
+        p = self._offset_robot_mm(target, now)
         if ref is None or p is None:
             return None
         dx, dy = float(p[0] - ref[0]), float(p[1] - ref[1])
         return dx, dy, math.hypot(dx, dy)
 
     def snapshot_row(self, label: str, stamp: str, now: float) -> dict:
-        row = {"time": stamp, "label": label, "base_seen": int(self.seen("base", now))}
+        row = {"time": stamp, "label": label, "base_seen": int(self.seen("base", now)),
+               "base_locked": int(self.locked)}
         for name in self.by_name:
             pose = None if name == "base" else self.robot_pose(name, now)
             row[f"{name}_seen"] = int(self.seen(name, now))
@@ -261,12 +356,16 @@ def save_references(path: str, refs: Dict[str, np.ndarray]):
     path = os.path.expanduser(path)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + ".tmp"
+    data = {"frame": "robot"}       # offsets are bottle minus target marker, robot frame, mm
+    data.update({k: [round(float(x), 2) for x in v] for k, v in refs.items()})
     with open(tmp, "w") as f:
-        yaml.safe_dump({k: [round(float(x), 2) for x in v] for k, v in refs.items()}, f)
+        yaml.safe_dump(data, f)
     os.replace(tmp, path)
 
 
 def load_references(path: str) -> Dict[str, np.ndarray]:
+    """References saved by this version. An older file (marker-frame offsets, no 'frame: robot')
+    is ignored, so its references must be set again."""
     import os
     import yaml
     path = os.path.expanduser(path)
@@ -274,4 +373,6 @@ def load_references(path: str) -> Dict[str, np.ndarray]:
         return {}
     with open(path) as f:
         data = yaml.safe_load(f) or {}
+    if data.get("frame") != "robot":
+        return {}
     return {k: np.asarray(v, dtype=np.float64) for k, v in data.items() if k in REFERENCE_TARGETS}

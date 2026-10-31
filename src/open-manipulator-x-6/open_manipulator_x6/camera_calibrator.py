@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-Checkerboard camera calibration with guidance.
+Guided checkerboard camera calibration.
 
 Live (ROS 2):
     ros2 run open_manipulator_x6 camera_calibrator --ros-args \
         -p image_topic:=/wrist_cam/image_raw -p camera_name:=wrist_cam
 
-    Show the board to the camera. Steady, new views are captured automatically; the panel says how
-    to move for each kind of view still missing. Press Calibrate, check the results, press Save.
-    Save writes ~/.ros/camera_info/<camera_name>.yaml (the old file is kept as .bak) and the views
-    to ~/calib_<camera_name>/<time>/. Restart the camera node to load the new calibration.
+    A dashed outline shows where the board should be. Line the board up with it (the hint under
+    the video says which way to move); it is captured automatically when it matches and is steady,
+    and the next outline appears. Use Skip for a pose you cannot reach. After the targets, press
+    Calibrate (the views are saved to ~/calib_<camera_name>/<time>/ at that moment), check the
+    results, and press Save to write ~/.ros/camera_info/<camera_name>.yaml (the old file is kept as
+    .bak). Restart the camera node to load it.
 
-From saved images (no ROS needed), e.g. the ROS calibrator's /tmp/calibrationdata.tar.gz:
-    mkdir -p ~/calib_old && tar -xzf /tmp/calibrationdata.tar.gz -C ~/calib_old
-    python3 -m open_manipulator_x6.camera_calibrator --images ~/calib_old
-    python3 -m open_manipulator_x6.camera_calibrator --images ~/calib_old --save ~/.ros/camera_info/wrist_cam.yaml
+From saved images (no ROS needed): a folder written by Calibrate, or the ROS calibrator's
+/tmp/calibrationdata.tar.gz unpacked:
+    python3 -m open_manipulator_x6.camera_calibrator --images ~/calib_wrist_cam/<time>
+    python3 -m open_manipulator_x6.camera_calibrator --images <folder> --save ~/.ros/camera_info/wrist_cam.yaml
 
 Board: 9 x 7 squares of 25 mm = 8 x 6 inner corners (the defaults).
 """
@@ -27,16 +29,14 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 
-from .calibration_core import (DISTANCES, HOW, POSITIONS, TILTS, Board, Collector, calibrate,
-                               describe, detect, load_folder, outer_quad, save_samples,
-                               write_camera_info)
+from .calibration_core import (Board, Coverage, TargetSession, calibrate, describe, detect,
+                               fit_target, load_folder, outer_quad, save_samples, write_camera_info)
 
 COLOURS = {"good": "#2e7d32", "warn": "#b26a00", "bad": "#c62828"}
 
 
-def report(res, extra=""):
-    lines = [f"Used {res.used} views" + (f", dropped {len(res.dropped)} with high error" if res.dropped else "")
-             + extra]
+def report(res):
+    lines = [f"Used {res.used} views" + (f", dropped {len(res.dropped)} with high error" if res.dropped else "")]
     for level, name, text in res.checks():
         lines.append(f"[{level.upper():4}] {name}: {text}")
     lines.append(f"K: fx={res.K[0, 0]:.1f} fy={res.K[1, 1]:.1f} cx={res.K[0, 2]:.1f} cy={res.K[1, 2]:.1f}")
@@ -50,10 +50,10 @@ def offline(args):
     board = Board(cols, rows, args.square)
     corners, size, used, skipped = load_folder(args.images, board)
     print(f"{len(used)} images with the board, {len(skipped)} skipped; image size {size[0]}x{size[1]}")
-    col = Collector(board)
+    cov = Coverage()
     for c in corners:
-        col.coverage.add(describe(c, board, *size))
-    missing = col.coverage.missing()
+        cov.add(describe(c, board, *size))
+    missing = cov.missing()
     print("Coverage missing: " + (", ".join(missing) if missing else "none"))
     res = calibrate(corners, board, size)
     print(report(res))
@@ -72,90 +72,83 @@ def offline(args):
 def build_window(get_frame, board, camera_name, output, samples_dir):  # pragma: no cover - offscreen test
     from PyQt5.QtCore import QTimer, Qt
     from PyQt5.QtGui import QImage, QPixmap
-    from PyQt5.QtWidgets import (QCheckBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                                 QPushButton, QVBoxLayout, QWidget)
-
-    GROUP_HELP = {
-        "Tilt": "Most important: these fix the focal length. Turn the board 30-45 degrees so one "
-                "edge comes toward the camera, one direction at a time.",
-        "Distance": "Near: the board fills about half the image width or more. Middle: about a third. "
-                    "Far: about a quarter. Keep every corner inside the image.",
-        "Position": "Move the board (or the camera) so the board's centre sits in each region of "
-                    "the image, edges and corners included. The grid is drawn on the video.",
-    }
+    from PyQt5.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+                                 QProgressBar, QPushButton, QVBoxLayout, QWidget)
 
     class Window(QWidget):
         def __init__(self):
             super().__init__()
             self.setWindowTitle(f"Camera calibration: {camera_name}")
-            self.col = Collector(board)
+            self.session = TargetSession(board)
             self.result = None
+            self.views_folder = None
             self.pool = ThreadPoolExecutor(max_workers=1)
             self.job = None
-            self.frame = None
 
             root = QHBoxLayout(self)
             left = QVBoxLayout()
             self.image = QLabel("waiting for camera ...")
             self.image.setAlignment(Qt.AlignCenter)
-            self.image.setMinimumSize(640, 480)
-            left.addWidget(self.image)
-            self.status = QLabel()
-            self.status.setWordWrap(True)
-            left.addWidget(self.status)
+            self.image.setMinimumSize(640, 400)
+            left.addWidget(self.image, 1)
+            self.hint = QLabel()
+            self.hint.setWordWrap(True)
+            self.hint.setStyleSheet("font-size:15px; font-weight:600; padding:4px;")
+            left.addWidget(self.hint)
+            self.bar = QProgressBar()
+            self.bar.setRange(0, 100)
+            self.bar.setFormat("match %p%")
+            left.addWidget(self.bar)
             root.addLayout(left, 3)
 
             right = QVBoxLayout()
-            self.next = QLabel()
-            self.next.setWordWrap(True)
-            self.next.setStyleSheet("font-weight:600; font-size:14px; padding:6px; "
-                                    "border:1px solid #bbb; border-radius:4px;")
-            right.addWidget(QLabel("Next:"))
-            right.addWidget(self.next)
+            self.target_lab = QLabel()
+            self.target_lab.setWordWrap(True)
+            self.target_lab.setStyleSheet("font-weight:600; font-size:14px; padding:6px; "
+                                          "border:1px solid #bbb; border-radius:4px;")
+            right.addWidget(self.target_lab)
+            how = QLabel("Line the board up with the dashed outline on the video, with its dot on "
+                         "the board's top-left. Move the board, or move the camera (the opposite "
+                         "way), whichever is easier. It captures by itself when the board matches "
+                         "and is steady.")
+            how.setWordWrap(True)
+            how.setStyleSheet("color:#555; font-size:12px;")
+            right.addWidget(how)
+            self.list = QListWidget()
+            for k, t in enumerate(self.session.targets):
+                self.list.addItem(QListWidgetItem(f"{k + 1:2d}. {t.text}"))
+            right.addWidget(self.list, 1)
 
-            self.items = {}
-            for title, names, ncols in (("Tilt", TILTS, 2), ("Distance", DISTANCES, 3),
-                                        ("Position", POSITIONS, 3)):
-                box = QGroupBox(title)
-                v = QVBoxLayout(box)
-                help_ = QLabel(GROUP_HELP[title])
-                help_.setWordWrap(True)
-                help_.setStyleSheet("color:#555; font-size:12px;")
-                v.addWidget(help_)
-                grid = QGridLayout()
-                for k, n in enumerate(names):
-                    lab = QLabel()
-                    lab.setToolTip(HOW[n])
-                    lab.setAlignment(Qt.AlignCenter)
-                    grid.addWidget(lab, k // ncols, k % ncols)
-                    self.items[n] = lab
-                v.addLayout(grid)
-                right.addWidget(box)
-
-            self.count = QLabel()
-            right.addWidget(self.count)
-            btns = QHBoxLayout()
+            row1 = QHBoxLayout()
+            self.skip_btn = QPushButton("Skip this target")
+            self.skip_btn.clicked.connect(self.skip)
+            reset = QPushButton("Start over")
+            reset.clicked.connect(self.reset)
+            row1.addWidget(self.skip_btn)
+            row1.addWidget(reset)
+            right.addLayout(row1)
+            row2 = QHBoxLayout()
             self.calib_btn = QPushButton("Calibrate")
             self.calib_btn.clicked.connect(self.run_calibration)
             self.save_btn = QPushButton("Save")
             self.save_btn.clicked.connect(self.save)
-            reset = QPushButton("Reset")
-            reset.clicked.connect(self.reset)
-            for b in (self.calib_btn, self.save_btn, reset):
-                btns.addWidget(b)
-            right.addLayout(btns)
+            row2.addWidget(self.calib_btn)
+            row2.addWidget(self.save_btn)
+            right.addLayout(row2)
             self.undist = QCheckBox("Show undistorted (straight lines should look straight)")
             right.addWidget(self.undist)
             self.result_box = QLabel()
             self.result_box.setWordWrap(True)
             self.result_box.setTextFormat(Qt.RichText)
             right.addWidget(self.result_box)
-            right.addStretch(1)
+            self.status = QLabel()
+            self.status.setWordWrap(True)
+            right.addWidget(self.status)
             root.addLayout(right, 2)
 
             self.timer = QTimer(self)
             self.timer.timeout.connect(self.tick)
-            self.timer.start(120)
+            self.timer.start(60)
             self.refresh_panel()
 
         # -- live loop --
@@ -165,12 +158,10 @@ def build_window(get_frame, board, camera_name, output, samples_dir):  # pragma:
             bgr = get_frame()
             if bgr is None:
                 return
-            self.frame = bgr
             h, w = bgr.shape[:2]
-            gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-            corners = detect(gray, board)
-            if self.job is None:
-                self.status.setText(self.col.offer(corners, w, h, bgr))
+            corners = detect(cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY), board)
+            if self.job is None and self.result is None:
+                self.session.offer(corners, w, h, bgr)
             self.show_frame(bgr, corners)
             self.refresh_panel()
 
@@ -180,52 +171,66 @@ def build_window(get_frame, board, camera_name, output, samples_dir):  # pragma:
             if self.result is not None and self.undist.isChecked():
                 img = cv2.undistort(img, self.result.K, self.result.D)
             else:
-                over = img.copy()
-                for k, name in enumerate(POSITIONS):          # tint covered regions green
-                    if self.col.coverage.done(name):
-                        r, c = divmod(k, 3)
-                        cv2.rectangle(over, (c * w // 3, r * h // 3), ((c + 1) * w // 3, (r + 1) * h // 3),
-                                      (0, 180, 0), -1)
-                img = cv2.addWeighted(over, 0.18, img, 0.82, 0)
-                for i in (1, 2):
-                    cv2.line(img, (i * w // 3, 0), (i * w // 3, h), (200, 200, 200), 1)
-                    cv2.line(img, (0, i * h // 3), (w, i * h // 3), (200, 200, 200), 1)
-                for s in self.col.samples:                    # outlines of captured views
-                    q = outer_quad(s.corners, board).astype(np.int32)
-                    cv2.polylines(img, [q], True, (255, 170, 0), 1)
+                t = self.session.current
+                if t is not None and self.result is None:
+                    q = fit_target(t, w, h).astype(np.int32)
+                    good = self.session.closeness() >= 1.0
+                    colour = (0, 200, 0) if good else (0, 165, 255)
+                    th = max(2, w // 320)
+                    for i in range(4):                       # dashed outline
+                        a, b = q[i].astype(float), q[(i + 1) % 4].astype(float)
+                        n = int(np.linalg.norm(b - a) // 18) + 1
+                        for s in range(0, n, 2):
+                            p1 = a + (b - a) * s / n
+                            p2 = a + (b - a) * min(s + 1, n) / n
+                            cv2.line(img, tuple(p1.astype(int)), tuple(p2.astype(int)), colour, th)
+                    # mark the outline's top-left corner so the board is not lined up rotated
+                    cv2.circle(img, tuple(q[0]), th * 3, colour, -1)
                 if corners is not None:
-                    cv2.drawChessboardCorners(img, (board.cols, board.rows),
-                                              corners.reshape(-1, 1, 2), True)
+                    cv2.drawChessboardCorners(img, (board.cols, board.rows), corners.reshape(-1, 1, 2), True)
+                    dq = outer_quad(corners, board).astype(np.int32)
+                    cv2.polylines(img, [dq], True, (255, 255, 255), 1)
             rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            q = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888).copy()
-            self.image.setPixmap(QPixmap.fromImage(q).scaled(
+            qi = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888).copy()
+            self.image.setPixmap(QPixmap.fromImage(qi).scaled(
                 self.image.width(), self.image.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
         def refresh_panel(self):
-            cov = self.col.coverage
-            for n, lab in self.items.items():
-                have, need = cov.counts.get(n, 0), cov.need(n)
-                done = have >= need
-                short = n.split("-")[0][0].upper() + n.split("-")[1][0].upper() if n in POSITIONS else n
-                lab.setText(f"{'✓ ' if done else ''}{short} {min(have, need)}/{need}")
-                lab.setStyleSheet("padding:3px; border-radius:3px; " +
-                                  ("background:#d8efd9; color:#1b5e20;" if done else "background:#eee; color:#333;"))
-            self.next.setText(cov.next_hint())
-            n = len(self.col.samples)
-            self.count.setText(f"Views captured: {n} (Calibrate unlocks at 12; aim for 25+ with "
-                               f"every box ticked)")
+            s = self.session
+            for k, st in enumerate(s.status):
+                item = self.list.item(k)
+                mark = {"done": "✓", "skipped": "–"}.get(st, "  ")
+                item.setText(f"{mark} {k + 1:2d}. {s.targets[k].text}")
+                item.setForeground(Qt.darkGreen if st == "done" else Qt.gray if st == "skipped" else Qt.black)
+                if k == s.index:
+                    self.list.setCurrentRow(k)
+            done = s.status.count("done")
+            if s.finished:
+                self.target_lab.setText(f"All targets visited ({done} captured). Press Calibrate.")
+            else:
+                self.target_lab.setText(f"Target {s.index + 1} of {len(s.targets)}: {s.current.text}")
+            if self.result is None and self.job is None:
+                self.hint.setText(s.last_hint or "Show the board to the camera.")
+            self.bar.setValue(int(100 * s.closeness()))
             busy = self.job is not None
-            self.calib_btn.setEnabled(n >= 12 and not busy)
-            self.calib_btn.setText("Calibrating..." if busy else "Calibrate")
+            self.calib_btn.setEnabled(done >= 10 and not busy)
+            self.calib_btn.setText("Calibrating..." if busy else f"Calibrate ({done} views)")
             self.save_btn.setEnabled(self.result is not None and not busy)
+            self.skip_btn.setEnabled(not s.finished and self.result is None)
             self.undist.setEnabled(self.result is not None)
 
         # -- actions --
+        def skip(self):
+            self.session.skip()
+            self.refresh_panel()
+
         def run_calibration(self):
-            corners = [s.corners for s in self.col.samples]
-            size = self.col.size
-            self.job = self.pool.submit(calibrate, corners, board, size)
-            self.status.setText("Calibrating in the background; the video keeps running.")
+            s = self.session
+            self.views_folder = os.path.join(os.path.expanduser(samples_dir), time.strftime("%Y%m%d_%H%M%S"))
+            n = save_samples(s.samples, self.views_folder)
+            self.job = self.pool.submit(calibrate, [x.corners for x in s.samples], board, s.size)
+            self.status.setText(f"{n} views saved in {self.views_folder}. Calibrating in the background...")
+            self.hint.setText("Calibrating...")
             self.refresh_panel()
 
         def finish_calibration(self):
@@ -237,38 +242,31 @@ def build_window(get_frame, board, camera_name, output, samples_dir):  # pragma:
                 self.result_box.setText(f"<span style='color:{COLOURS['bad']}'>Calibration failed: {e}</span>")
                 return
             r = self.result
-            missing = self.col.coverage.missing()
             rows = [f"<b>Result</b> ({r.used} views used"
                     + (f", {len(r.dropped)} dropped for high error" if r.dropped else "") + ")"]
             for level, name, text in r.checks():
                 rows.append(f"<span style='color:{COLOURS[level]}'>● {name}: {text}</span>")
-            if missing:
-                rows.append(f"<span style='color:{COLOURS['warn']}'>Coverage still missing: "
-                            f"{', '.join(missing)}. More views there will make the result more reliable.</span>")
-            rows.append("<span style='color:#555'>Saving is allowed only when no check is red.</span>"
-                        if not r.ok() else "Looks good: press Save.")
+            rows.append("Press Save." if r.ok() else
+                        "<span style='color:#555'>A red check blocks saving: press Start over and "
+                        "collect again.</span>")
             self.result_box.setText("<br>".join(rows))
-            self.status.setText("Calibration done. Tick 'Show undistorted' to inspect it.")
+            self.hint.setText("Calibration done. Tick 'Show undistorted' to inspect it.")
 
         def save(self):
             r = self.result
-            if r is None:
-                return
-            if not r.ok():
-                self.status.setText("Not saved: fix the red checks first (usually: more tilted views, "
-                                    "and views near the image edges).")
+            if r is None or not r.ok():
+                self.status.setText("Not saved: a check is red.")
                 return
             backup = write_camera_info(r, camera_name, output)
-            folder = os.path.join(os.path.expanduser(samples_dir), time.strftime("%Y%m%d_%H%M%S"))
-            n = save_samples(self.col.samples, folder)
             self.status.setText(f"Saved {os.path.expanduser(output)}"
                                 + (f" (old file kept as {os.path.basename(backup)})" if backup else "")
-                                + f" and {n} views in {folder}. Restart the camera node to load it.")
+                                + ". Restart the camera node to load it.")
 
         def reset(self):
-            self.col.reset()
+            self.session.reset()
             self.result = None
             self.result_box.setText("")
+            self.status.setText("")
             self.undist.setChecked(False)
             self.refresh_panel()
 

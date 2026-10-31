@@ -6,7 +6,13 @@ reference, and a Snapshot button that appends one row to a CSV.
 
     ros2 launch open_manipulator_x6 workspace_markers.launch.py
 
-Buttons
+Camera frame (for a camera that moves, such as the wrist camera):
+    ros2 run open_manipulator_x6 aruco_detector --ros-args -r __node:=wrist_aruco -p frame:=camera \
+        -p image_topic:=/wrist_cam/image_raw -p camera_info_topic:=/wrist_cam/camera_info
+  Shows each marker's position from the lens (x right in the image, y down, z out of the lens)
+  and its straight-line distance. Needs no base marker; the lock and references are hidden.
+
+Buttons (robot frame)
 - Lock base: with the camera and base marker still, press once. The base pose is averaged over a
   few seconds and frozen, which steadies every position. Press again (Re-lock) if the camera or
   the base is moved; the window warns when the live base no longer matches the lock.
@@ -65,9 +71,13 @@ class ArucoDetectorNode(Node):
         P("base_yaw_deg", -90.0)                         # -90 = printed arrow points to robot front
         P("tolerance_mm", 10.0)                          # bottle deviation shown as OK below this
         P("refs_file", "~/Open-Manipulator-X-6/aruco_refs.yaml")
-        P("log_file", "~/flexigrasp_logs/aruco_snapshots.csv")
+        P("log_file", "")                                # default depends on frame (below)
         P("process_hz", 15.0)
+        P("frame", "robot")                              # robot (needs the base marker) or camera
         g = lambda n: self.get_parameter(n).value
+        self.frame = str(g("frame")).strip().lower()
+        if self.frame not in ("robot", "camera"):
+            raise ValueError("frame must be 'robot' or 'camera'")
 
         ids, names, sizes = list(g("marker_ids")), list(g("marker_names")), list(g("marker_sizes_mm"))
         if not (len(ids) == len(names) == len(sizes)):
@@ -76,7 +86,9 @@ class ArucoDetectorNode(Node):
                                     g("dictionary"), list(g("base_offset_mm")), float(g("base_yaw_deg")))
         self.tolerance = float(g("tolerance_mm"))
         self.refs_file = g("refs_file")
-        self.log_file = os.path.expanduser(g("log_file"))
+        default_log = ("~/flexigrasp_logs/aruco_snapshots.csv" if self.frame == "robot"
+                       else f"~/flexigrasp_logs/aruco_snapshots_{self.get_name()}.csv")
+        self.log_file = os.path.expanduser(g("log_file") or default_log)
         self.tracker.references = load_references(self.refs_file)
 
         self.latest_msg = None
@@ -86,7 +98,7 @@ class ArucoDetectorNode(Node):
         self.create_subscription(Image, g("image_topic"), self.on_image, qos_profile_sensor_data)
         self.create_subscription(CameraInfo, g("camera_info_topic"), self.on_info, qos_profile_sensor_data)
         self.create_timer(1.0 / g("process_hz"), self.process)
-        self.get_logger().info(f"Listening on {g('image_topic')}; references: "
+        self.get_logger().info(f"Listening on {g('image_topic')} ({self.frame} frame); references: "
                                f"{sorted(self.tracker.references) or 'none yet'}")
 
     def on_info(self, m: CameraInfo):
@@ -126,15 +138,28 @@ class ArucoDetectorNode(Node):
 
     def snapshot(self, label: str) -> str:
         now = time.monotonic()
-        row = self.tracker.snapshot_row(label, datetime.now().isoformat(timespec="seconds"), now)
-        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
-        new = not os.path.exists(self.log_file)
-        with open(self.log_file, "a", newline="") as f:
+        stamp = datetime.now().isoformat(timespec="seconds")
+        row = (self.tracker.snapshot_row(label, stamp, now) if self.frame == "robot"
+               else self.tracker.snapshot_row_camera(label, stamp, now))
+        path = self.log_file
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        stem, ext = os.path.splitext(self.log_file)
+        k = 0
+        while os.path.exists(path):                  # never mix column layouts in one file
+            with open(path, newline="") as f:
+                header = next(csv.reader(f), [])
+            if not header or header == list(row):
+                break
+            k += 1
+            path = f"{stem}_{self.frame}{'' if k == 1 else f'_{k}'}{ext}"
+        self.log_file = path
+        new = not os.path.exists(path)
+        with open(path, "a", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(row))
             if new:
                 w.writeheader()
             w.writerow(row)
-        return f"snapshot '{label}' saved to {self.log_file}"
+        return f"snapshot '{label}' saved to {path}"
 
 
 def build_window(node: ArucoDetectorNode):  # pragma: no cover - exercised by the offscreen test
@@ -144,49 +169,60 @@ def build_window(node: ArucoDetectorNode):  # pragma: no cover - exercised by th
                                  QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
     names = list(node.tracker.by_name)
+    camera_mode = node.frame == "camera"
+    columns = (["Marker", "Seen", "x (mm)", "y (mm)", "z (mm)", "dist (mm)"] if camera_mode
+               else ["Marker", "Seen", "x (mm)", "y (mm)", "z (mm)"])
 
     class Window(QWidget):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("X6 Workspace Markers")
+            self.setWindowTitle("X6 Markers (camera frame)" if camera_mode else "X6 Workspace Markers")
             lay = QVBoxLayout(self)
             self.image = QLabel("waiting for camera ...")
             self.image.setAlignment(Qt.AlignCenter)
             self.image.setMinimumSize(640, 360)
             lay.addWidget(self.image)
 
-            self.table = QTableWidget(len(names), 5)
-            self.table.setHorizontalHeaderLabels(["Marker", "Seen", "x (mm)", "y (mm)", "z (mm)"])
+            if camera_mode:
+                note = QLabel("Camera frame: each marker's position from the lens. x = right in "
+                              "the image, y = down, z = out of the lens; dist = straight-line "
+                              "distance. Check dist with a tape measure from the lens.")
+                note.setWordWrap(True)
+                lay.addWidget(note)
+            self.table = QTableWidget(len(names), len(columns))
+            self.table.setHorizontalHeaderLabels(columns)
             self.table.verticalHeader().setVisible(False)
             self.table.setEditTriggers(QTableWidget.NoEditTriggers)
             self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             for r, n in enumerate(names):
-                for c, v in enumerate([n, "", "", "", ""]):
+                for c, v in enumerate([n] + [""] * (len(columns) - 1)):
                     self.table.setItem(r, c, QTableWidgetItem(v))
             self.table.resizeRowsToContents()
             h = sum(self.table.rowHeight(i) for i in range(len(names)))
             self.table.setFixedHeight(h + self.table.horizontalHeader().height() + 4)
             lay.addWidget(self.table)
 
-            base = QHBoxLayout()
-            self.lock_btn = QPushButton("Lock base")
-            self.lock_btn.clicked.connect(self.lock)
-            base.addWidget(self.lock_btn)
-            self.base_state = QLabel()
-            self.base_state.setWordWrap(True)
-            base.addWidget(self.base_state, 1)
-            lay.addLayout(base)
+            self.dev = {}
+            if not camera_mode:                       # base lock and references: robot frame only
+                base = QHBoxLayout()
+                self.lock_btn = QPushButton("Lock base")
+                self.lock_btn.clicked.connect(self.lock)
+                base.addWidget(self.lock_btn)
+                self.base_state = QLabel()
+                self.base_state.setWordWrap(True)
+                base.addWidget(self.base_state, 1)
+                lay.addLayout(base)
 
-            self.dev = {t: QLabel() for t in REFERENCE_TARGETS}
-            for t in REFERENCE_TARGETS:
-                lay.addWidget(self.dev[t])
+                self.dev = {t: QLabel() for t in REFERENCE_TARGETS}
+                for t in REFERENCE_TARGETS:
+                    lay.addWidget(self.dev[t])
 
-            refs = QHBoxLayout()
-            for t, txt in (("bottle_start", "Set start reference"), ("bottle_place", "Set place reference")):
-                b = QPushButton(txt)
-                b.clicked.connect(lambda _=False, t=t: self.set_ref(t))
-                refs.addWidget(b)
-            lay.addLayout(refs)
+                refs = QHBoxLayout()
+                for t, txt in (("bottle_start", "Set start reference"), ("bottle_place", "Set place reference")):
+                    b = QPushButton(txt)
+                    b.clicked.connect(lambda _=False, t=t: self.set_ref(t))
+                    refs.addWidget(b)
+                lay.addLayout(refs)
 
             snap = QHBoxLayout()
             self.label = QLineEdit()
@@ -237,10 +273,24 @@ def build_window(node: ArucoDetectorNode):  # pragma: no cover - exercised by th
             for r, n in enumerate(names):
                 seen = node.tracker.seen(n, now) or any(e["name"] == n for e in node.result.values())
                 self.table.item(r, 1).setText("yes" if seen else "no")
-                pose = None if n == "base" else node.tracker.robot_pose(n, now)
-                cells = ("ref", "ref", "ref") if n == "base" else (pose[0] if pose else ("--", "--", "--"))
+                if camera_mode:
+                    pose = node.tracker.camera_pose(n, now)
+                    cells = list(pose[0]) + [pose[1]] if pose else ["--"] * 4
+                else:
+                    pose = None if n == "base" else node.tracker.robot_pose(n, now)
+                    cells = ("ref", "ref", "ref") if n == "base" else (pose[0] if pose else ("--", "--", "--"))
                 for c, v in enumerate(cells, start=2):
-                    self.table.item(r, c).setText(v if isinstance(v, str) else f"{v:+.1f}")
+                    if isinstance(v, str):
+                        self.table.item(r, c).setText(v)
+                    else:
+                        self.table.item(r, c).setText(f"{v:.1f}" if c == 5 else f"{v:+.1f}")
+            if node.error:
+                self.say(node.error, True)
+            elif not node.tracker.calibrated and node.view is not None:
+                self.say("Camera not calibrated (camera_info is empty): markers are detected but "
+                         "positions need a calibration.", True)
+            if camera_mode:
+                return
             tr = node.tracker
             if tr.locked:
                 self.lock_btn.setText("Re-lock base")
@@ -275,11 +325,6 @@ def build_window(node: ArucoDetectorNode):  # pragma: no cover - exercised by th
                     colour = "#2e7d32" if ok else "#c62828"
                 self.dev[t].setText(txt)
                 self.dev[t].setStyleSheet(f"color:{colour}")
-            if node.error:
-                self.say(node.error, True)
-            elif not node.tracker.calibrated and node.view is not None:
-                self.say("Camera not calibrated (camera_info is empty): markers are detected but "
-                         "positions need a calibration.", True)
 
     return Window
 

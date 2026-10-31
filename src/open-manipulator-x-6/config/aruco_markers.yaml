@@ -1,8 +1,9 @@
-# Workspace markers seen by the world camera (C920).
+# Workspace markers seen by the world camera (RealSense D435, colour stream).
+# If `ros2 topic list | grep color` shows /camera/color/... (one "camera"), change both topics.
 aruco_detector:
   ros__parameters:
-    image_topic: /world_cam/image_raw
-    camera_info_topic: /world_cam/camera_info
+    image_topic: /camera/camera/color/image_raw
+    camera_info_topic: /camera/camera/color/camera_info
     dictionary: DICT_4X4_50
     marker_ids: [0, 1, 2, 3]
     marker_names: [base, bottle_start, bottle_place, bottle]

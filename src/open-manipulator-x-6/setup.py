@@ -27,8 +27,11 @@ setup(
             'keyboard_teleop = open_manipulator_x6.keyboard_teleop:main',
             "teach_pendant = open_manipulator_x6.teach_pendant:main",
             "sequence_runner = open_manipulator_x6.sequence_runner:main",
+<<<<<<< HEAD
             "aruco_detector = open_manipulator_x6.aruco_detector:main",
             "camera_calibrator = open_manipulator_x6.camera_calibrator:main",
+=======
+>>>>>>> f9e072399d2f7e32ad73d0713eb448fc9a5dbf36
         ],
     },
 )

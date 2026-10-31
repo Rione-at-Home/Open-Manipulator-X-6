@@ -1,0 +1,7 @@
+idx,label,target_rad,band_rad,settle_time_s,final_error_rad,final_error_ticks,achieved_rate_hz,final_integral,integral_saturated
+0,step,0.0200,0.00607,0.1181,0.00006,0.04,33.3,0.00,False
+1,step,-0.0200,0.00607,0.1485,-0.00006,-0.04,33.3,-0.00,False
+2,step,0.0200,0.00607,0.2100,0.00006,0.04,33.3,0.00,False
+3,step,-0.0200,0.00607,0.1485,-0.00159,-1.04,33.3,-0.00,False
+4,step,0.0200,0.00607,0.2100,0.00159,1.04,33.3,0.00,False
+5,step,-0.0200,0.00607,0.1485,-0.00006,-0.04,33.3,-0.00,False

@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-Workspace marker checker: live view of the ArUco markers from the world camera (C920), their
-positions in the robot frame, how far the bottle is from its start/place reference, and a
-Snapshot button that appends one row to a CSV.
+Workspace marker checker: live view of the ArUco markers from the world camera (RealSense D435
+colour stream), their positions in the robot frame, how far the bottle is from its start/place
+reference, and a Snapshot button that appends one row to a CSV.
 
     ros2 launch open_manipulator_x6 workspace_markers.launch.py
 
 Buttons
-- Set start reference / Set place reference: with the bottle placed correctly by hand, press to
-  remember where it sits relative to that marker. Saved to refs_file, so this is done once.
+- Lock base: with the camera and base marker still, press once. The base pose is averaged over a
+  few seconds and frozen, which steadies every position. Press again (Re-lock) if the camera or
+  the base is moved; the window warns when the live base no longer matches the lock.
+- Set start reference / Set place reference: with the base locked and the bottle placed correctly
+  by hand, press to remember where it sits relative to that marker. Saved to refs_file.
 - Snapshot: writes the current marker positions and bottle deviations, with the label you type,
   to log_file (median of the last few frames).
 """
@@ -52,8 +55,8 @@ class ArucoDetectorNode(Node):
     def __init__(self):
         super().__init__("aruco_detector")
         P = self.declare_parameter
-        P("image_topic", "/world_cam/image_raw")
-        P("camera_info_topic", "/world_cam/camera_info")
+        P("image_topic", "/camera/camera/color/image_raw")
+        P("camera_info_topic", "/camera/camera/color/camera_info")
         P("dictionary", "DICT_4X4_50")
         P("marker_ids", [0, 1, 2, 3])
         P("marker_names", ["base", "bottle_start", "bottle_place", "bottle"])
@@ -107,6 +110,15 @@ class ArucoDetectorNode(Node):
         self.error = ""
 
     # ---- actions used by the GUI ----
+    def lock_base(self) -> str:
+        if not self.tracker.calibrated:
+            raise ValueError("camera_info is empty, so the base pose cannot be measured yet")
+        lk = self.tracker.lock_base(time.monotonic())
+        msg = (f"Base locked from {lk.samples} frames (spread {lk.spread_mm:.1f} mm, "
+               f"{lk.spread_deg:.1f} deg)")
+        self.get_logger().info(msg)
+        return msg
+
     def set_reference(self, target: str) -> str:
         p = self.tracker.set_reference(target, time.monotonic())
         save_references(self.refs_file, self.tracker.references)
@@ -156,6 +168,15 @@ def build_window(node: ArucoDetectorNode):  # pragma: no cover - exercised by th
             self.table.setFixedHeight(h + self.table.horizontalHeader().height() + 4)
             lay.addWidget(self.table)
 
+            base = QHBoxLayout()
+            self.lock_btn = QPushButton("Lock base")
+            self.lock_btn.clicked.connect(self.lock)
+            base.addWidget(self.lock_btn)
+            self.base_state = QLabel()
+            self.base_state.setWordWrap(True)
+            base.addWidget(self.base_state, 1)
+            lay.addLayout(base)
+
             self.dev = {t: QLabel() for t in REFERENCE_TARGETS}
             for t in REFERENCE_TARGETS:
                 lay.addWidget(self.dev[t])
@@ -187,6 +208,12 @@ def build_window(node: ArucoDetectorNode):  # pragma: no cover - exercised by th
             self.status.setStyleSheet("color:#c62828" if error else "")
             self.status.setText(text)
 
+        def lock(self):
+            try:
+                self.say(node.lock_base())
+            except ValueError as e:
+                self.say(str(e), True)
+
         def set_ref(self, target):
             try:
                 self.say(node.set_reference(target))
@@ -214,10 +241,30 @@ def build_window(node: ArucoDetectorNode):  # pragma: no cover - exercised by th
                 cells = ("ref", "ref", "ref") if n == "base" else (pose[0] if pose else ("--", "--", "--"))
                 for c, v in enumerate(cells, start=2):
                     self.table.item(r, c).setText(v if isinstance(v, str) else f"{v:+.1f}")
+            tr = node.tracker
+            if tr.locked:
+                self.lock_btn.setText("Re-lock base")
+                moved = tr.base_moved(now)
+                if moved:
+                    self.base_state.setText(f"Base moved? Live base is {moved[0]:.1f} mm / "
+                                            f"{moved[1]:.1f} deg from the lock. Re-lock if the "
+                                            f"camera or base was bumped.")
+                    self.base_state.setStyleSheet("color:#c62828")
+                else:
+                    self.base_state.setText(f"Base locked ({tr.lock.samples} frames, spread "
+                                            f"{tr.lock.spread_mm:.1f} mm / {tr.lock.spread_deg:.1f} deg)")
+                    self.base_state.setStyleSheet("color:#2e7d32")
+            else:
+                self.lock_btn.setText("Lock base")
+                self.base_state.setText("Base not locked: positions follow the live base marker "
+                                        "and jitter more. Keep everything still and press Lock base.")
+                self.base_state.setStyleSheet("color:#777")
             for t in REFERENCE_TARGETS:
                 d = node.tracker.deviation(t, now)
                 short = t.replace("bottle_", "")
-                if t not in node.tracker.references:
+                if not node.tracker.locked:
+                    txt, colour = f"Bottle vs {short}: lock the base first", "#777"
+                elif t not in node.tracker.references:
                     txt, colour = f"Bottle vs {short}: no reference yet", "#777"
                 elif d is None:
                     txt, colour = f"Bottle vs {short}: markers not in view", "#777"

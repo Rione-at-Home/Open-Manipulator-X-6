@@ -28,6 +28,7 @@ setup(
             "teach_pendant = open_manipulator_x6.teach_pendant:main",
             "sequence_runner = open_manipulator_x6.sequence_runner:main",
             "aruco_detector = open_manipulator_x6.aruco_detector:main",
+            "camera_calibrator = open_manipulator_x6.camera_calibrator:main",
         ],
     },
 )

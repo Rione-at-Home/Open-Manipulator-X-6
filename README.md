@@ -4,6 +4,8 @@ A ROS 2 Humble driver package for real-time hardware control of a modified 6-DOF
 
 ![Image-1](images/Image-1.png)   
 
+![Image-1](images/open-manipulator-x6-built.png)  
+
 ---
 
 ## Branches

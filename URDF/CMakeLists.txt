@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 
-project(End Effector Full Build)
+project(open_manipulator_x6)
 
 find_package(catkin REQUIRED)
 

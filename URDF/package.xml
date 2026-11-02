@@ -1,10 +1,10 @@
 <package format="2">
-  <name>End Effector Full Build</name>
+  <name>open_manipulator_x6</name>
   <version>1.0.0</version>
   <description>
-    <p>URDF Description package for End Effector Full Build</p>
+    <p>URDF Description package for open_manipulator_x6</p>
     <p>This package contains configuration data, 3D models and launch files
-for End Effector Full Build robot</p>
+for open_manipulator_x6 robot</p>
   </description>
   <author>TODO</author>
   <maintainer email="TODO@email.com" />

@@ -18,7 +18,11 @@
        left/right in the export. ESTIMATES: replace with weighed values (MEASURED_G in the tool)
      - collision meshes simplified to convex pieces (meshes/collision/)
      - gripper_tcp moved from 0.06 to 0.12 m (fingertips reach ~0.139 m); wrist_cam frame added
-     - position limits are still placeholders (TODO) -->
+     - position limits are still placeholders (TODO)
+     - zero and direction matched to the real arm (live check 2026-11-03): the servos read
+       joint2 = -pi/2 and joint4 = +pi/2 in the CAD pose (joint origins rotated by those), and
+       joint1, joint4, joint5, wrist_rotate turn the opposite way to the export (axes flipped).
+       The URDF now uses the same joint angles as arm_driver. -->
 <robot
   name="open_manipulator_x6">
 
@@ -113,7 +117,7 @@
     <child
       link="link_1" />
     <axis
-      xyz="0 0 -1" />
+      xyz="0 0 1" />
     <!-- XM430-W350: effort ~80% of 4.1 N.m stall, velocity = driver max_profile_velocity (4.8 rad/s). TODO: set real mechanical lower/upper -->
     <limit
       lower="-3.14159265"
@@ -164,7 +168,7 @@
     type="revolute">
     <origin
       xyz="0 0.019 0.038605"
-      rpy="-1.57079633 0 0" />
+      rpy="-1.57079633 -1.57079632 0" />
     <parent
       link="link_1" />
     <child
@@ -278,13 +282,13 @@
     type="revolute">
     <origin
       xyz="-0.00078582 0.12013 -0.038"
-      rpy="-3.14159265 0 0" />
+      rpy="-3.14159265 0 1.57079633" />
     <parent
       link="link_3" />
     <child
       link="link_4" />
     <axis
-      xyz="0 0 -1" />
+      xyz="0 0 1" />
     <!-- XM430-W350: effort ~80% of 4.1 N.m stall, velocity = driver max_profile_velocity (4.8 rad/s). TODO: set real mechanical lower/upper -->
     <limit
       lower="-3.14159265"
@@ -341,7 +345,7 @@
     <child
       link="link_5" />
     <axis
-      xyz="0 0 -1" />
+      xyz="0 0 1" />
     <!-- XL430-W250: effort ~80% of 1.5 N.m stall, velocity = driver max_profile_velocity (4.8 rad/s). TODO: set real mechanical lower/upper -->
     <limit
       lower="-3.14159265"
@@ -398,7 +402,7 @@
     <child
       link="link_6" />
     <axis
-      xyz="0 0 -1" />
+      xyz="0 0 1" />
     <!-- XL430-W250: effort ~80% of 1.5 N.m stall, velocity = driver max_profile_velocity (4.8 rad/s). TODO: set real mechanical lower/upper -->
     <limit
       lower="-3.14159265"

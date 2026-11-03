@@ -23,15 +23,13 @@ setup(
     entry_points={
         'console_scripts': [
             'arm_driver = open_manipulator_x6.arm_driver:main',
+            'gripper_joint_bridge = open_manipulator_x6.gripper_joint_bridge:main',
             'session_logger = open_manipulator_x6.session_logger:main',
             'keyboard_teleop = open_manipulator_x6.keyboard_teleop:main',
-            "teach_pendant = open_manipulator_x6.teach_pendant:main",
-            "sequence_runner = open_manipulator_x6.sequence_runner:main",
-<<<<<<< HEAD
-            "aruco_detector = open_manipulator_x6.aruco_detector:main",
-            "camera_calibrator = open_manipulator_x6.camera_calibrator:main",
-=======
->>>>>>> f9e072399d2f7e32ad73d0713eb448fc9a5dbf36
+            'teach_pendant = open_manipulator_x6.teach_pendant:main',
+            'sequence_runner = open_manipulator_x6.sequence_runner:main',
+            'aruco_detector = open_manipulator_x6.aruco_detector:main',
+            'camera_calibrator = open_manipulator_x6.camera_calibrator:main',
         ],
     },
 )

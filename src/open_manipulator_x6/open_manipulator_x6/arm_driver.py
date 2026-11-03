@@ -10,6 +10,10 @@ from .dynamixel_driver import (
     POSITION_CONTROL_MODE,
     DynamixelHardwareDriver,
 )
+# gripper_homing_offset default: leave the servo's stored Homing Offset as it is. Running the
+# driver without the params file then cannot reset a calibrated offset to 0.
+HOMING_OFFSET_KEEP = -(2 ** 31)
+
 from .utils import (
     rad_s_to_raw_vel,
     rad_to_ticks,
@@ -59,7 +63,8 @@ class ArmDriver(Node):
         # Homing Offset for the gripper, in ticks (4096 per turn). Present Position = actual + offset.
         # -1024 shifts the gripper's working range by -90 deg so it no longer touches the driver's
         # 0..4095 goal clamp. 0 = factory default. Written to EEPROM only when it differs.
-        self.declare_parameter("gripper_homing_offset", 0)
+        # Default HOMING_OFFSET_KEEP = leave whatever is stored in the servo.
+        self.declare_parameter("gripper_homing_offset", HOMING_OFFSET_KEEP)
         # True: torque stays on when this node exits (the arm holds its pose instead of dropping).
         self.declare_parameter("leave_torque_on_shutdown", True)
 
@@ -149,10 +154,14 @@ class ArmDriver(Node):
 
         # Gripper homing offset (EEPROM, torque is already off here).
         if self.gripper_id is not None:
-            if not self.driver.set_homing_offset(self.gripper_id, self.gripper_homing_offset):
-                self.get_logger().error("Failed to set gripper homing offset; aborting init.")
-                return False
-            self.get_logger().info(f"Gripper homing offset = {self.gripper_homing_offset} ticks.")
+            if self.gripper_homing_offset == HOMING_OFFSET_KEEP:
+                stored = self.driver.read_homing_offset(self.gripper_id)
+                self.get_logger().info(f"Gripper homing offset left as stored: {stored} ticks.")
+            else:
+                if not self.driver.set_homing_offset(self.gripper_id, self.gripper_homing_offset):
+                    self.get_logger().error("Failed to set gripper homing offset; aborting init.")
+                    return False
+                self.get_logger().info(f"Gripper homing offset = {self.gripper_homing_offset} ticks.")
 
         # Everything in plain position control except (optionally) the gripper.
         gripper_current = (
@@ -354,7 +363,9 @@ class ArmDriver(Node):
 
         for idx, m_id in enumerate(self.joint_ids):
             if m_id in states:
-                pos_rad = ticks_to_rad(states[m_id]["position"])
+                # Present Position is signed 32-bit (it can go negative with a Homing Offset);
+                # the sync read returns it unsigned
+                pos_rad = ticks_to_rad(DynamixelHardwareDriver._signed32_to_ticks(states[m_id]["position"]))
                 vel_rad_s = raw_vel_to_rad_s(states[m_id]["velocity"])
                 effort = raw_effort(states[m_id]["current"], self.has_current.get(m_id, True))
 

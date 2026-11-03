@@ -8,6 +8,17 @@
      - tool0 and gripper_tcp frames added
      - rounded pi values (1.5708 / 3.1416) replaced with exact values
      - single named material instead of empty material names -->
+<!-- ROS 2 description (open_manipulator_x6_description), 2026-11-03:
+     - joints renamed to the arm_driver names: joint1..joint5, wrist_rotate (was joint_1..joint_6);
+       the fingers keep left/right_finger_joint (gripper_joint_bridge converts the driver's
+       'gripper' angle to left_finger_joint metres)
+     - inertials re-estimated from the meshes (tools/compute_inertials.py): the export used
+       1.00 g/cm3 for everything; now servos at datasheet mass (XM430-W350 82 g, XL430-W250 57.2 g)
+       and printed PLA at 0.93 g/cm3 (60 % infill). The finger inertials were also swapped
+       left/right in the export. ESTIMATES: replace with weighed values (MEASURED_G in the tool)
+     - collision meshes simplified to convex pieces (meshes/collision/)
+     - gripper_tcp moved from 0.06 to 0.12 m (fingertips reach ~0.139 m); wrist_cam frame added
+     - position limits are still placeholders (TODO) -->
 <robot
   name="open_manipulator_x6">
 
@@ -18,18 +29,19 @@
   <link
     name="base_link">
     <inertial>
+      <!-- estimate: servo XM430 + PLA parts, 129.3 g -->
       <origin
-        xyz="0.000129786222443529 0.000117263818205204 0.0162758255016597"
+        xyz="0.000178 0.000156 0.020120"
         rpy="0 0 0" />
       <mass
-        value="0.0936425644174346" />
+        value="0.12926" />
       <inertia
-        ixx="2.49092153387043E-05"
-        ixy="-1.09621383268992E-09"
-        ixz="-1.07944630040121E-07"
-        iyy="3.04100437581291E-05"
-        iyz="-8.45479963320941E-09"
-        izz="4.50042001098797E-05" />
+        ixx="4.3571e-05"
+        ixy="-2.8424e-09"
+        ixz="-3.8996e-07"
+        iyy="5.3791e-05"
+        iyz="-1.4609e-07"
+        izz="5.2020e-05" />
     </inertial>
     <visual>
       <origin
@@ -37,7 +49,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/base_link.STL" />
+          filename="package://open_manipulator_x6_description/meshes/base_link.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -48,25 +60,26 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/base_link.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/base_link.stl" />
       </geometry>
     </collision>
   </link>
   <link
     name="link_1">
     <inertial>
+      <!-- estimate: servo XM430 + PLA parts, 83.9 g -->
       <origin
-        xyz="-2.35528484593406E-06 0.000663648866914279 0.0259676584911236"
+        xyz="-0.000002 0.000677 0.026562"
         rpy="0 0 0" />
       <mass
-        value="0.045152551464129" />
+        value="0.08393" />
       <inertia
-        ixx="1.2521832860831E-05"
-        ixy="-3.8328695465783E-11"
-        ixz="6.69659765937386E-12"
-        iyy="1.07173661089207E-05"
-        iyz="-6.35306176458414E-09"
-        izz="7.47176371292306E-06" />
+        ixx="2.4742e-05"
+        ixy="-1.1288e-10"
+        ixz="8.6639e-11"
+        iyy="2.1562e-05"
+        iyz="-4.5065e-08"
+        izz="1.3704e-05" />
     </inertial>
     <visual>
       <origin
@@ -74,7 +87,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_1.STL" />
+          filename="package://open_manipulator_x6_description/meshes/link_1.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -85,12 +98,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_1.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/link_1.stl" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="joint_1"
+    name="joint1"
     type="revolute">
     <origin
       xyz="0.012002 0.00023455 0.0479"
@@ -111,18 +124,19 @@
   <link
     name="link_2">
     <inertial>
+      <!-- estimate: servo XM430 + PLA parts, 104.8 g -->
       <origin
-        xyz="-0.105070352540609 -0.00855659834429456 -0.0194428964549005"
+        xyz="-0.114260 -0.010158 -0.019543"
         rpy="0 0 0" />
       <mass
-        value="0.0676816456886698" />
+        value="0.10485" />
       <inertia
-        ixx="1.65560858652846E-05"
-        ixy="4.82754435599593E-11"
-        ixz="-4.60294481921775E-11"
-        iyy="2.06796748549709E-05"
-        iyz="-6.35769745166968E-09"
-        izz="2.27201206167403E-05" />
+        ixx="2.9732e-05"
+        ixy="-1.4047e-05"
+        ixz="-7.8225e-07"
+        iyy="1.1144e-04"
+        iyz="-1.4754e-07"
+        izz="1.1941e-04" />
     </inertial>
     <visual>
       <origin
@@ -130,7 +144,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_2.STL" />
+          filename="package://open_manipulator_x6_description/meshes/link_2.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -141,12 +155,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_2.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/link_2.stl" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="joint_2"
+    name="joint2"
     type="revolute">
     <origin
       xyz="0 0.019 0.038605"
@@ -167,18 +181,19 @@
   <link
     name="link_3">
     <inertial>
+      <!-- estimate: servo XM430 + PLA parts, 99.2 g -->
       <origin
-        xyz="-0.000787410037518588 0.0900493532770279 -0.0194864074084944"
+        xyz="-0.000793 0.097929 -0.019573"
         rpy="0 0 0" />
       <mass
-        value="0.0616267578939117" />
+        value="0.09924" />
       <inertia
-        ixx="1.8583849455015E-05"
-        ixy="2.74646090930291E-11"
-        ixz="3.95254524360419E-11"
-        iyy="1.02605602568614E-05"
-        iyz="6.35328357958445E-09"
-        izz="1.54040163656324E-05" />
+        ixx="9.0177e-05"
+        ixy="-1.8810e-09"
+        ixz="1.6701e-10"
+        iyy="1.6299e-05"
+        iyz="6.2259e-07"
+        izz="8.5711e-05" />
     </inertial>
     <visual>
       <origin
@@ -186,7 +201,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_3.STL" />
+          filename="package://open_manipulator_x6_description/meshes/link_3.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -197,12 +212,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_3.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/link_3.stl" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="joint_3"
+    name="joint3"
     type="revolute">
     <origin
       xyz="-0.12721 -0.027874 -0.038"
@@ -223,18 +238,19 @@
   <link
     name="link_4">
     <inertial>
+      <!-- estimate: servo XL430 + PLA parts, 70.7 g -->
       <origin
-        xyz="0.0482721783163973 -0.000827562289479555 -0.0191060108377996"
+        xyz="0.049115 -0.000890 -0.019084"
         rpy="0 0 0" />
       <mass
-        value="0.0575315725773189" />
+        value="0.07066" />
       <inertia
-        ixx="9.06630578689863E-06"
-        ixy="-1.41300851696502E-08"
-        ixz="4.82249703416159E-08"
-        iyy="1.8096019207348E-05"
-        iyz="5.48017657755004E-10"
-        izz="1.28096238949944E-05" />
+        ixx="1.3782e-05"
+        ixy="6.2307e-07"
+        ixz="-3.6268e-08"
+        iyy="2.3737e-05"
+        iyz="2.9913e-08"
+        izz="2.1744e-05" />
     </inertial>
     <visual>
       <origin
@@ -242,7 +258,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_4.STL" />
+          filename="package://open_manipulator_x6_description/meshes/link_4.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -253,12 +269,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_4.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/link_4.stl" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="joint_4"
+    name="joint4"
     type="revolute">
     <origin
       xyz="-0.00078582 0.12013 -0.038"
@@ -279,18 +295,19 @@
   <link
     name="link_5">
     <inertial>
+      <!-- estimate: servo XL430 + PLA parts, 199.7 g -->
       <origin
-        xyz="0.0513557128969815 0.000728708384202692 -0.0198995841456977"
+        xyz="0.051983 0.000630 -0.019831"
         rpy="0 0 0" />
       <mass
-        value="0.196610499335019" />
+        value="0.19971" />
       <inertia
-        ixx="0.000140501214524777"
-        ixy="-2.39076074706526E-07"
-        ixz="6.10422167556196E-07"
-        iyy="8.57123072537491E-05"
-        iyz="-2.07141695114082E-07"
-        izz="8.4807243833424E-05" />
+        ixx="1.3530e-04"
+        ixy="-8.2306e-07"
+        ixz="1.2944e-07"
+        iyy="1.1234e-04"
+        iyz="-7.1780e-08"
+        izz="1.0924e-04" />
     </inertial>
     <visual>
       <origin
@@ -298,7 +315,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_5.STL" />
+          filename="package://open_manipulator_x6_description/meshes/link_5.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -309,12 +326,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_5.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/link_5.stl" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="joint_5"
+    name="joint5"
     type="revolute">
     <origin
       xyz="0.063995 -0.019495 -0.019"
@@ -335,18 +352,19 @@
   <link
     name="link_6">
     <inertial>
+      <!-- estimate: PLA parts, 20.7 g -->
       <origin
-        xyz="-7.85517455526019E-08 0.016960925463422 -0.00465536449513249"
+        xyz="-0.000000 0.016999 -0.004634"
         rpy="0 0 0" />
       <mass
-        value="0.022366761098947" />
+        value="0.02075" />
       <inertia
-        ixx="1.25752673184451E-05"
-        ixy="4.09212978828369E-11"
-        ixz="4.87662252141389E-11"
-        iyy="8.09396513001028E-06"
-        iyz="-3.53674456411984E-06"
-        izz="1.29492717286134E-05" />
+        ixx="1.1639e-05"
+        ixy="-4.2343e-09"
+        ixz="-8.1953e-11"
+        iyy="7.4916e-06"
+        iyz="-3.2770e-06"
+        izz="1.1971e-05" />
     </inertial>
     <visual>
       <origin
@@ -354,7 +372,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_6.STL" />
+          filename="package://open_manipulator_x6_description/meshes/link_6.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -365,12 +383,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/link_6.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/link_6.stl" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="joint_6"
+    name="wrist_rotate"
     type="revolute">
     <origin
       xyz="0.10175 -0.0005 -0.0052553"
@@ -391,18 +409,19 @@
   <link
     name="gripper_base_link">
     <inertial>
+      <!-- estimate: servo XM430 + PLA parts, 113.0 g -->
       <origin
-        xyz="0.00274997950606592 -0.00140850170252382 0.000250647825428052"
+        xyz="0.002750 -0.000142 -0.001717"
         rpy="0 0 0" />
       <mass
-        value="0.0759116549493636" />
+        value="0.11298" />
       <inertia
-        ixx="2.31849919251031E-05"
-        ixy="6.78103602521537E-08"
-        ixz="-4.15408493045143E-09"
-        iyy="1.87061294837777E-05"
-        iyz="7.89906279801438E-07"
-        izz="2.88404383988443E-05" />
+        ixx="3.7883e-05"
+        ixy="3.9783e-08"
+        ixz="-6.5810e-11"
+        iyy="4.7658e-05"
+        iyz="2.9003e-06"
+        izz="5.8919e-05" />
     </inertial>
     <visual>
       <origin
@@ -410,7 +429,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/gripper_base_link.STL" />
+          filename="package://open_manipulator_x6_description/meshes/gripper_base_link.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -421,7 +440,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/gripper_base_link.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/gripper_base_link.stl" />
       </geometry>
     </collision>
   </link>
@@ -453,18 +472,19 @@
   <link
     name="left_finger_link">
     <inertial>
+      <!-- estimate: PLA parts, 71.1 g -->
       <origin
-        xyz="0.0429372493692416 -9.68716879325981E-05 -0.00572711318825414"
+        xyz="0.042890 0.000097 0.005708"
         rpy="0 0 0" />
       <mass
-        value="0.0733051771376262" />
+        value="0.07113" />
       <inertia
-        ixx="1.48615118428207E-05"
-        ixy="2.49277013544461E-09"
-        ixz="-2.85034901536668E-06"
-        iyy="4.3341259519483E-05"
-        iyz="-6.72434676175351E-10"
-        izz="4.76316694189256E-05" />
+        ixx="1.4960e-05"
+        ixy="-5.6928e-09"
+        ixz="5.6613e-06"
+        iyy="6.5500e-05"
+        iyz="-7.9272e-10"
+        izz="6.9139e-05" />
     </inertial>
     <visual>
       <origin
@@ -472,7 +492,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/left_finger_link.STL" />
+          filename="package://open_manipulator_x6_description/meshes/left_finger_link.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -483,7 +503,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/left_finger_link.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/left_finger_link.stl" />
       </geometry>
     </collision>
   </link>
@@ -509,18 +529,19 @@
   <link
     name="right_finger_link">
     <inertial>
+      <!-- estimate: PLA parts, 71.1 g -->
       <origin
-        xyz="0.0429372493692418 -0.000103128312076484 0.00572711318826657"
+        xyz="0.042890 0.000103 -0.005709"
         rpy="0 0 0" />
       <mass
-        value="0.0733051771376244" />
+        value="0.07113" />
       <inertia
-        ixx="1.48615118428205E-05"
-        ixy="-2.4927701358747E-09"
-        ixz="2.85034901536655E-06"
-        iyy="4.33412595194824E-05"
-        iyz="-6.72434676183711E-10"
-        izz="4.76316694189253E-05" />
+        ixx="1.4960e-05"
+        ixy="5.6952e-09"
+        ixz="-5.6615e-06"
+        iyy="6.5500e-05"
+        iyz="-7.9497e-10"
+        izz="6.9139e-05" />
     </inertial>
     <visual>
       <origin
@@ -528,7 +549,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/right_finger_link.STL" />
+          filename="package://open_manipulator_x6_description/meshes/right_finger_link.STL" />
       </geometry>
       <material
         name="light_grey" />
@@ -539,7 +560,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://open_manipulator_x6/meshes/right_finger_link.STL" />
+          filename="package://open_manipulator_x6_description/meshes/collision/right_finger_link.stl" />
       </geometry>
     </collision>
   </link>
@@ -567,18 +588,35 @@
       offset="0" />
   </joint>
   <!-- gripper_tcp: tool center point between the fingertips (no geometry).
-       TODO: set z to the measured distance from the gripper mounting face to the fingertip center -->
+       Placeholder 0.12 m: the fingertips reach ~0.139 m from gripper_base_link, so the pad centre is
+       a little short of that. TODO: measure from the gripper mounting face to the pad centre -->
   <link
     name="gripper_tcp" />
   <joint
     name="gripper_tcp_joint"
     type="fixed">
     <origin
-      xyz="0 0 0.06"
+      xyz="0 0 0.12"
       rpy="0 0 0" />
     <parent
       link="gripper_base_link" />
     <child
       link="gripper_tcp" />
+  </joint>
+  <!-- wrist_cam: optical frame of the Elecom wrist camera (z out of the lens, x right in the image,
+       y down), the frame_id its images use. PLACEHOLDER pose; the hand-eye calibration will give
+       the real one. Mass not included (add it to gripper_base_link once weighed). -->
+  <link
+    name="wrist_cam" />
+  <joint
+    name="wrist_cam_joint"
+    type="fixed">
+    <origin
+      xyz="0 0.045 0.03"
+      rpy="0 0 0" />
+    <parent
+      link="gripper_base_link" />
+    <child
+      link="wrist_cam" />
   </joint>
 </robot>

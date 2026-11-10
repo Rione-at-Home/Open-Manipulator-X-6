@@ -7,6 +7,8 @@ Controls (indices come from config/joy_ps4.yaml):
                      (gripper selected: circle closes, cross opens)
     triangle         fine / coarse step
     square           save pose (the pendant supplies the name)
+    share            hand-guide on/off: the arm goes limp to be moved by hand; off holds it
+                     where it is and the targets re-sync to that pose
     options          stop: /arm_stop, then targets re-sync to where the arm is
 
 Targets always cover every joint and start from the measured /joint_states, so nothing jumps
@@ -25,6 +27,7 @@ class ButtonMap:
     reverse: int = 0        # cross
     fine: int = 2           # triangle
     save: int = 3           # square
+    hand_guide: int = 8     # share
     stop: int = 9           # options
 
     @classmethod
@@ -64,6 +67,7 @@ class JoyTeleopCore:
         self.prev_contact = False
         self.message = ""
         self.last_pressed: List[int] = []
+        self.hand_guiding = False               # arm limp: never send jog commands
 
     # ---- state ------------------------------------------------------------------------------
     @property
@@ -92,7 +96,8 @@ class JoyTeleopCore:
 
     # ---- input ------------------------------------------------------------------------------
     def on_joy(self, buttons: List[int]) -> set:
-        """Edge-triggered actions. Returns a subset of {'stop', 'save', 'select', 'fine'}."""
+        """Edge-triggered actions. Returns a subset of
+        {'stop', 'save', 'select', 'fine', 'hand_guide'}."""
         b = list(buttons) + [0] * max(0, 16 - len(buttons))
         pressed = [i for i, (now, was) in enumerate(zip(b, self._prev + [0] * len(b))) if now and not was]
         self._prev, self.held = b, b
@@ -116,12 +121,26 @@ class JoyTeleopCore:
             events.add("fine")
         if bm.save in pressed:
             events.add("save")
+        if bm.hand_guide in pressed:
+            events.add("hand_guide")
         return events
+
+    def set_hand_guide(self, on: bool):
+        """While on, tick() sends nothing. Turning it off re-syncs the targets to the arm's
+        measured pose (the arm was moved by hand, so the old targets are stale)."""
+        if on == self.hand_guiding:
+            return
+        self.hand_guiding = on
+        if on:
+            self.message = "HAND-GUIDE: arm is limp, support it and move it by hand"
+        else:
+            self.names = []                      # re-sync from the next /joint_states
+            self.message = "Holding here; targets re-synced to the arm"
 
     def tick(self, now: float, measured: Dict[str, float], contact_both: bool) -> bool:
         """Call at a fixed rate. Returns True when targets changed and a command should go out."""
         changed = False
-        if not self.ready:
+        if not self.ready or self.hand_guiding:
             self.prev_contact = contact_both
             return False
 

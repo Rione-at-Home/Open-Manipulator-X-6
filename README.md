@@ -1,20 +1,188 @@
-# OpenManipulator-X 6-DOF CAD files
+# Teach and replay for the Open Manipulator X6
 
-This branch CAD contains all the Solidworks and URDF files.
+Teach named poses (by hand or with the gamepad), then replay them as a sequence while the pads and arm are recorded.
 
-![Image-1](Image-1.png)   
+## Files and where they go
 
----
+| File | Put it in |
+| --- | --- |
+| `arm_driver.py` (hand-guide version) | the package's Python folder (`open_manipulator_x6/`) |
+| `pose_store.py`, `sequence.py`, `sequence_executor.py` | same |
+| `joy_teleop_core.py`, `teach_pendant.py`, `sequence_runner.py` | same |
+| `session_logger.py`, `keyboard_teleop.py` | replace your copies |
+| `config/joy_ps4.yaml`, `config/bottle_sequence.example.yaml` | `config/` |
+| `launch/teach.launch.py`, `launch/bottle_test.launch.py` | `launch/` |
+| `test/test_hand_guide.py`, `test/test_pendant_hand_guide.py`, other tests | `test/` (run without ROS) |
 
-## Package Architecture
+## One-time setup
 
-```text
-open_manipulator_x6/
-├── Solidworks/             # Directory that contains all Solidworks files
-│   │── assemblies/         # Assembly files directory
-│   └── components/         # Part files directory
-├── URDF
-│   └──                     # Direcotry that contains all URDF files for simulation.
-├── Image-1.pg
-└── README.md
+```bash
+sudo apt install ros-humble-joy python3-pyqt5
 ```
+
+`setup.py`, under `console_scripts`:
+
+```python
+"teach_pendant = open_manipulator_x6.teach_pendant:main",
+"sequence_runner = open_manipulator_x6.sequence_runner:main",
+```
+
+`setup.py`, in `data_files` (add `from glob import glob` at the top):
+
+```python
+("share/" + package_name + "/config", glob("config/*.yaml")),
+("share/" + package_name + "/launch", glob("launch/*.py")),
+```
+
+`package.xml`:
+
+```xml
+<exec_depend>joy</exec_depend>
+<exec_depend>python3-pyqt5</exec_depend>
+<exec_depend>python3-yaml</exec_depend>
+<exec_depend>std_srvs</exec_depend>
+<exec_depend>flexigrasp_msgs</exec_depend>
+```
+
+Build and source:
+
+```bash
+cd ~/ros2_ws
+colcon build --symlink-install --packages-select open_manipulator_x6
+source install/setup.bash
+```
+
+## 1. Teach
+
+Each in its own terminal (source the workspace first):
+
+```bash
+# T1: arm driver
+ros2 run open_manipulator_x6 arm_driver
+
+# T2: FlexiGrasp pad node (as usual)
+
+# T3: teach pendant + gamepad
+ros2 launch open_manipulator_x6 teach.launch.py
+```
+
+### Gamepad
+
+| Button | Action |
+| --- | --- |
+| L1 / R1 | previous / next joint |
+| circle / cross (hold) | move forward / reverse (gripper: close / open) |
+| triangle | fine / coarse step |
+| square | save pose (name typed in the window) |
+| share | hand-guide on / off |
+| options | STOP |
+
+The grey line at the bottom of the window shows `last buttons pressed`. If a number differs from `config/joy_ps4.yaml`, edit the file and restart. If two actions share a button, the pendant refuses to start and names them.
+
+### Hand-guide (move the arm by hand)
+
+1. Hold the arm first (joints 2 and 3 drop when torque goes off).
+2. Press **share** or **Hand-guide**. Arm joints go limp; the gripper keeps holding. The window shows an orange `HAND-GUIDE` label and the jog buttons do nothing.
+3. Move the arm, then save the pose as usual.
+4. Press **share** again or **Hold here**. Torque comes back at the current pose and jogging continues from there.
+
+STOP while limp also holds the arm where it is. Without the pendant:
+
+```bash
+ros2 topic pub --once /arm_hand_guide std_msgs/msg/Bool "{data: true}"   # limp
+ros2 topic pub --once /arm_hand_guide std_msgs/msg/Bool "{data: false}"  # hold here
+ros2 topic echo /arm_status                                               # HAND_GUIDE / READY
+```
+
+### Poses and the gripper
+
+- Poses save the measured arm joints only. The gripper is closed and opened by sequence steps, so **Move To** in the pendant never closes the gripper.
+- With the gripper open wide enough for the object, press **Set gripper open = current position** once.
+- Poses are saved to `~/Open-Manipulator-X-6/poses.yaml`.
+
+## 2. Write the sequence
+
+Copy `config/bottle_sequence.example.yaml` to `~/Open-Manipulator-X-6/<task>_sequence.yaml` and edit the steps.
+
+| Step | Meaning |
+| --- | --- |
+| `move: <pose>` | go to a saved pose |
+| `gripper: open` | go to `gripper_open` |
+| `gripper: close` | close in small steps until both pads touch, then squeeze `squeeze_rad` past contact (the current cap sets the force) |
+| `wait: <s>` | pause |
+| `speed: <n>` | profile velocity |
+| `cap: <n>` | gripper current cap |
+| `rezero` | re-zero the pads |
+| `mark: <label>` | label in the logs |
+
+If `gripper: close` finds no contact within `max_close_travel_rad`, it logs `no_contact` and carries on.
+
+### Gripper close settings
+
+- **Direction.** With the current driver, the gripper position goes **up** when closing (open −2.60 → marker −1.06), so `close_sign` must be **+1.0** in both `joy_ps4.yaml` and the sequence. Check once: in the pendant, **circle** must close the gripper.
+- **Travel.** Measure it per object: set gripper open, close on the object in the pendant until contact, then take |gripper_open − contact position| plus about 0.15 rad. Too large and a missed grasp closes fully before it is logged.
+
+| Object | Travel measured | `max_close_travel_rad` |
+| --- | --- | --- |
+| Whiteboard marker | 1.54 rad | 1.7 |
+| Bottle, sponge, plastic cup | measure | measure + 0.15 |
+
+### Example: marker from the cup to the bowl
+
+ArUco markers: `bottle_start` = cup, `bottle_place` = bowl.
+
+```yaml
+- move: home
+- gripper: open
+- move: pre_grasp        # above the cup, fingers lined up with the marker's lean
+- move: grasp            # lowered around the marker
+- gripper: close
+- wait: 0.5
+- move: lift             # straight up until the marker clears the rim
+- move: carry
+- move: place            # just above the bowl
+- gripper: open
+- wait: 0.5
+- move: retreat          # straight up out of the bowl
+- move: home
+```
+
+Squeeze-only runs (bottle, sponge, plastic cup) use their own sequence files with their own close travel.
+
+## 3. Replay and record
+
+Close the teach pendant and keyboard teleop first, so only the runner commands the arm.
+
+```bash
+ros2 launch open_manipulator_x6 bottle_test.launch.py \
+  sequence:=~/Open-Manipulator-X-6/marker_sequence.yaml label:=marker_1
+```
+
+- Starts the session logger, a bag recording and the runner; all stop when the sequence ends.
+- 3 s countdown before the first move. Any `/arm_stop` (gamepad options, keyboard space, pendant STOP, Ctrl-C) aborts.
+- Add the camera with `extra_topics:="/image_raw"`.
+
+Outputs in `~/flexigrasp_logs/`:
+
+| File | Contents |
+| --- | --- |
+| `<stamp>_<label>.csv` | pads + joints + current step per row |
+| `<stamp>_<label>_steps.csv` | one row per step: result, duration, contact position |
+| `<stamp>_<label>_bag/` | rosbag |
+
+After the first run, check that the `gripper: close` row in `_steps.csv` shows contact, not `no_contact`.
+
+## Tests (no robot or ROS needed)
+
+```bash
+cd ~/ros2_ws/src/open_manipulator_x6
+python3 -m pytest test/ -q
+```
+
+## Safety notes
+
+- Test a new sequence with `repeats: 1` and a hand near the power switch.
+- Moves are point to point at the driver's profile velocity, with no collision checking. Re-check poses after anything on the table moves.
+- Always support the arm before hand-guide.
+- The empty PET bottle crushes easily: start at a gripper cap of 80 (~0.22 A) and raise in steps only if it slips.
+- Watch the battery level; stop before it runs low.

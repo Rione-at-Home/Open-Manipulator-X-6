@@ -9,7 +9,11 @@ or by hand:
     ros2 run open_manipulator_x6 teach_pendant --ros-args --params-file config/joy_ps4.yaml
 
 Gamepad: L1/R1 pick joint, circle/cross move it (gripper: close/open), triangle fine/coarse,
-square save pose (name from the window), options STOP.
+square save pose (name from the window), share hand-guide on/off, options STOP.
+
+Hand-guide: the arm joints go limp (gripper keeps holding) so the arm can be moved by hand;
+support it first. "Hold here" (or share again, or STOP) turns torque back on at the current pose
+and re-syncs the jog targets, so nothing jumps. Needs arm_driver with /arm_hand_guide.
 
 Poses store arm joints only (measured from /joint_states). The gripper is open/close actions.
 """
@@ -20,7 +24,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState, Joy
-from std_msgs.msg import Empty, Int16, Int32
+from std_msgs.msg import Bool, Empty, Int16, Int32, String
 
 from .joy_teleop_core import ButtonMap, JoyTeleopCore
 from .pose_store import PoseError, PoseStore
@@ -82,11 +86,15 @@ class PendantNode(Node):
         self.fingers = list(g("fingers"))
         self.on_save_request = None     # set by the window
         self.joy_seen = False
+        self.driver_status = ""
+        self.guide_request_t = -1e9     # when hand-guide was last requested from here
 
         self.pub_cmd = self.create_publisher(JointState, "/arm_command", 10)
         self.pub_stop = self.create_publisher(Empty, "/arm_stop", 10)
         self.pub_cap = self.create_publisher(Int16, "/arm_gripper_current", 10)
         self.pub_vel = self.create_publisher(Int32, "/arm_profile_velocity", 10)
+        self.pub_guide = self.create_publisher(Bool, "/arm_hand_guide", 10)
+        self.create_subscription(String, "/arm_status", self.on_status, 10)
         self.create_subscription(JointState, "/joint_states", self.on_joint_states, 10)
         self.create_subscription(Joy, "/joy", self.on_joy, 10)
         if TactileFrame is not None:
@@ -101,6 +109,21 @@ class PendantNode(Node):
         self.velocity = dict(zip(m.name, m.velocity))
         if not self.core.ready:
             self.core.sync(m.name, m.position)
+
+    def on_status(self, m: String):
+        # The driver is the authority on whether the arm is limp (e.g. STOP ends hand-guiding).
+        # Just after a request from here, give the driver 0.5 s to switch before believing it.
+        self.driver_status = m.data
+        limp = m.data == "HAND_GUIDE"
+        if limp == self.core.hand_guiding or time.monotonic() - self.guide_request_t < 0.5:
+            return
+        expected_limp = self.core.hand_guiding
+        self.core.set_hand_guide(limp)
+        if expected_limp and m.data not in ("READY", "MOVING"):
+            self.core.message = f"Hand-guide ended by the driver (status {m.data})"
+        elif expected_limp and time.monotonic() - self.guide_request_t < 1.5:
+            self.core.message = ("The driver did not enter hand-guide: is arm_driver the version "
+                                 "with /arm_hand_guide, and is torque on?")
 
     def on_pad(self, f, m):
         self.pads[f] = (time.monotonic(), bool(m.in_contact), float(m.total))
@@ -117,6 +140,8 @@ class PendantNode(Node):
             self.stop()
         if "save" in events and self.on_save_request:
             self.on_save_request()
+        if "hand_guide" in events:
+            self.hand_guide(not self.core.hand_guiding)
 
     def tick(self):
         if self.core.tick(time.monotonic(), self.measured, self.both_in_contact()):
@@ -134,8 +159,14 @@ class PendantNode(Node):
 
     def stop(self):
         self.pub_stop.publish(Empty())
+        self.core.set_hand_guide(False)          # STOP while limp = hold here (driver does the same)
         self.core.names = []
         self.core.message = "STOP sent; targets re-sync to the arm"
+
+    def hand_guide(self, on: bool):
+        self.guide_request_t = time.monotonic()
+        self.core.set_hand_guide(on)             # stop jogging at once; the driver confirms via /arm_status
+        self.pub_guide.publish(Bool(data=bool(on)))
 
     def save_pose(self, name: str):
         missing = [j for j in self.arm_joints if j not in self.measured]
@@ -188,6 +219,13 @@ def build_window(node: PendantNode):  # pragma: no cover - exercised by the offs
             self.contact_box.setChecked(node.core.contact_stop)
             self.contact_box.toggled.connect(lambda v: setattr(node.core, "contact_stop", v))
             row.addWidget(self.contact_box)
+            self.guide_btn = QPushButton("Hand-guide (share)")
+            self.guide_btn.setToolTip("Arm goes limp so it can be moved by hand. Support it first.")
+            self.guide_btn.clicked.connect(lambda: node.hand_guide(True))
+            row.addWidget(self.guide_btn)
+            self.hold_btn = QPushButton("Hold here")
+            self.hold_btn.clicked.connect(lambda: node.hand_guide(False))
+            row.addWidget(self.hold_btn)
             stop = QPushButton("STOP")
             stop.setStyleSheet("background:#c62828;color:white;font-weight:bold;padding:6px 18px")
             stop.clicked.connect(node.stop)
@@ -327,7 +365,14 @@ def build_window(node: PendantNode):  # pragma: no cover - exercised by the offs
         def refresh(self):
             c = node.core
             self.sel_label.setText(f"Selected: {c.selected_joint}")
-            self.mode_label.setText(f"Step: {'FINE' if c.fine else 'coarse'}")
+            if c.hand_guiding:
+                self.mode_label.setText("HAND-GUIDE: arm limp, support it")
+                self.mode_label.setStyleSheet("color:white;background:#e65100;font-weight:bold;padding:2px 6px")
+            else:
+                self.mode_label.setText(f"Step: {'FINE' if c.fine else 'coarse'}")
+                self.mode_label.setStyleSheet("")
+            self.guide_btn.setEnabled(not c.hand_guiding)
+            self.hold_btn.setEnabled(c.hand_guiding)
             for i, n in enumerate(c.joint_order):
                 m = node.measured.get(n)
                 t = c.targets.get(n)

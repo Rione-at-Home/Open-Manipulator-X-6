@@ -1,0 +1,9 @@
+# Wrist camera (Elecom) for wrist_camera.launch.py.
+# Set video_device ONCE to the camera's fixed name from `ls /dev/v4l/by-id/` (the entry ending in
+# -video-index0). /dev/videoN numbers change between boots because the D435 adds devices too.
+wrist_cam:
+  ros__parameters:
+    video_device: /dev/v4l/by-id/REPLACE-WITH-ELECOM-ENTRY-video-index0
+    image_size: [1280, 720]          # the calibration is only valid at this size
+    camera_frame_id: wrist_cam
+    camera_info_url: file://~/.ros/camera_info/wrist_cam.yaml   # "~" is expanded by the launch file

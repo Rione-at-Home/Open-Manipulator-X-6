@@ -67,6 +67,9 @@ class ArmDriver(Node):
         self.declare_parameter("gripper_homing_offset", HOMING_OFFSET_KEEP)
         # True: torque stays on when this node exits (the arm holds its pose instead of dropping).
         self.declare_parameter("leave_torque_on_shutdown", True)
+        # Hand-guiding (/arm_hand_guide): True keeps the gripper's torque on while the arm joints
+        # go limp, so a held object stays held while the arm is moved by hand.
+        self.declare_parameter("hand_guide_keep_gripper", True)
 
         self.port = self.get_parameter("port").get_parameter_value().string_value
         self.baudrate = self.get_parameter("baudrate").get_parameter_value().integer_value
@@ -86,6 +89,8 @@ class ArmDriver(Node):
         self.gripper_current_max = gp("gripper_current_max").get_parameter_value().integer_value
         self.leave_torque_on = gp("leave_torque_on_shutdown").get_parameter_value().bool_value
         self.gripper_homing_offset = gp("gripper_homing_offset").get_parameter_value().integer_value
+        self.hand_guide_keep_gripper = gp("hand_guide_keep_gripper").get_parameter_value().bool_value
+        self.hand_guiding = False
 
         self.joint_map = dict(zip(self.joint_names, self.joint_ids))
         self.gripper_id = self.joint_map.get(self.gripper_name)
@@ -114,6 +119,7 @@ class ArmDriver(Node):
         self.create_subscription(Bool, "/arm_enable", self.arm_enable_cb, 10)
         self.create_subscription(Empty, "/arm_home", self.arm_home_cb, 10)
         self.create_subscription(Empty, "/arm_stop", self.arm_stop_cb, 10)
+        self.create_subscription(Bool, "/arm_hand_guide", self.hand_guide_cb, 10)
         self.create_subscription(Int16, "/arm_gripper_current", self.gripper_current_cb, 10)
         self.create_subscription(Int32, "/arm_profile_velocity", self.profile_velocity_cb, 10)
 
@@ -211,15 +217,53 @@ class ArmDriver(Node):
         )
         if ok:
             self.is_enabled = enable
+            self.hand_guiding = False
             self.status = "READY" if enable else "DISABLED"
             self.get_logger().info(f"Torque {'enabled' if enable else 'disabled'}.")
         else:
             self.status = "ERROR"
             self.get_logger().error("Failed to toggle torque.")
 
+    def hand_guide_ids(self) -> list:
+        """Joints that go limp when hand-guiding: all, or all but the gripper."""
+        if self.hand_guide_keep_gripper and self.gripper_id is not None:
+            return [j for j in self.joint_ids if j != self.gripper_id]
+        return list(self.joint_ids)
+
+    def set_hand_guide(self, on: bool) -> bool:
+        """on: torque off on the arm joints so the arm can be moved by hand.
+        off: torque back on, holding wherever the arm now is (no jump)."""
+        if on == self.hand_guiding:
+            return True
+        if on and not self.is_enabled:
+            self.get_logger().warn("Hand-guide ignored: torque is off. Enable torque first.")
+            return False
+        ids = self.hand_guide_ids()
+        ok = (self.driver.enable_torque(ids, False) if on
+              else self.driver.enable_torque_holding_position(ids))
+        if not ok:
+            self.status = "ERROR"
+            self.get_logger().error(f"Failed to {'start' if on else 'end'} hand-guiding.")
+            return False
+        self.hand_guiding = on
+        self.status = "HAND_GUIDE" if on else "READY"
+        if on:
+            self.get_logger().warn("Hand-guiding: arm joints are limp, support the arm"
+                                   + (" (gripper still holds)." if len(ids) < len(self.joint_ids) else "."))
+        else:
+            self.get_logger().info("Hand-guiding ended: holding the current pose.")
+        return True
+
     # --- Callbacks ---
+    def hand_guide_cb(self, msg: Bool):
+        self.set_hand_guide(bool(msg.data))
+
     def arm_command_cb(self, msg: JointState):
         if not self.is_enabled:
+            return
+        if self.hand_guiding:
+            self.get_logger().warn("Ignoring /arm_command while hand-guiding.",
+                                   throttle_duration_sec=2.0)
             return
 
         target_ticks = list(self.current_positions)  # Fallback to current position if unassigned
@@ -244,13 +288,17 @@ class ArmDriver(Node):
         self.enable_torque(msg.data)
 
     def arm_home_cb(self, _msg: Empty):
-        if not self.is_enabled:
+        if not self.is_enabled or self.hand_guiding:
             return
         home_ticks = [rad_to_ticks(p) for p in self.home_positions]
         self.driver.write_positions(self.joint_ids, home_ticks)
         self.status = "MOVING"
 
     def arm_stop_cb(self, _msg: Empty):
+        # While hand-guiding, STOP means "hold here": torque back on at the current pose.
+        if self.hand_guiding:
+            self.set_hand_guide(False)
+            return
         # Stop motion by commanding current position
         if self.is_enabled:
             stop_ticks = [rad_to_ticks(p) for p in self.current_positions]

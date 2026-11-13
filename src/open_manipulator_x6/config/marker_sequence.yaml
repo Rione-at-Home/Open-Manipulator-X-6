@@ -1,0 +1,9 @@
+- move: home
+- move: pre_grasp
+- move: grasp
+- wait: 1.0        # let the gripper finish closing before lifting
+- move: lift
+- move: pre_drop
+- move: place
+- wait: 1.0        # let it finish opening before leaving
+- move: home

@@ -15,7 +15,9 @@ Hand-guide: the arm joints go limp (gripper keeps holding) so the arm can be mov
 support it first. "Hold here" (or share again, or STOP) turns torque back on at the current pose
 and re-syncs the jog targets, so nothing jumps. Needs arm_driver with /arm_hand_guide.
 
-Poses store arm joints only (measured from /joint_states). The gripper is open/close actions.
+Poses store the measured arm joints and, with "Save gripper with pose" ticked (default), the
+gripper too, so Move To and the sequence runner replay it. Untick it for poses where the gripper
+must keep whatever it holds (e.g. lift/carry saved with the gripper open by mistake).
 """
 import sys
 import time
@@ -47,8 +49,9 @@ class PendantNode(Node):
         P("coarse_step", 0.02)          # rad per tick while a button is held (20 Hz -> 0.4 rad/s)
         P("fine_step", 0.004)
         P("gripper_step", 0.01)
-        P("close_sign", -1.0)           # gripper position decreases when closing
+        P("close_sign", 1.0)            # X6: gripper position increases when closing (-2.6 open)
         P("contact_stop", True)
+        P("save_gripper", True)         # include the gripper in saved poses
         P("idle_resync_s", 1.0)
         P("joint_limits", [0.0])        # flat [lo, hi] per joint in joint_order; [0.0] = +/- pi
         P("rate_hz", 20.0)
@@ -78,6 +81,7 @@ class PendantNode(Node):
                                   g("idle_resync_s"), buttons)
         self.arm_joints = [n for n in order if n != self.gripper]
         self.store = PoseStore(g("poses_file"))
+        self.save_gripper = bool(g("save_gripper"))
         self.cap, self.cap_step, self.cap_max = g("gripper_current"), g("cap_step"), g("cap_max")
         self.vel, self.vel_step, self.vel_max = g("profile_velocity"), g("velocity_step"), g("velocity_max")
 
@@ -169,10 +173,11 @@ class PendantNode(Node):
         self.pub_guide.publish(Bool(data=bool(on)))
 
     def save_pose(self, name: str):
-        missing = [j for j in self.arm_joints if j not in self.measured]
+        joints = self.arm_joints + ([self.gripper] if self.save_gripper else [])
+        missing = [j for j in joints if j not in self.measured]
         if missing:
             raise PoseError(f"no measured position yet for {missing}")
-        self.store.set(name, self.arm_joints, [self.measured[j] for j in self.arm_joints])
+        self.store.set(name, joints, [self.measured[j] for j in joints])
 
     def move_to(self, name: str):
         pose = self.store.get(name)
@@ -271,11 +276,16 @@ def build_window(node: PendantNode):  # pragma: no cover - exercised by the offs
                             ("Move To", self.move_to), ("Delete", self.delete)):
                 b = QPushButton(txt); b.clicked.connect(fn); btns.addWidget(b)
             lay.addLayout(btns)
+            self.grip_box = QCheckBox("Save gripper with pose")
+            self.grip_box.setChecked(node.save_gripper)
+            self.grip_box.setToolTip("Untick for poses where the gripper should keep what it holds")
+            self.grip_box.toggled.connect(lambda v: setattr(node, "save_gripper", v))
+            lay.addWidget(self.grip_box)
             gopen = QPushButton("Set gripper open = current position")
             gopen.clicked.connect(self.set_gripper_open)
             lay.addWidget(gopen)
 
-            lay.addWidget(QLabel("Saved poses (arm joints only)"))
+            lay.addWidget(QLabel("Saved poses (gripper angle shown when saved with the pose)"))
             self.poses = QListWidget()
             self.poses.itemClicked.connect(lambda it: self.name.setText(it.data(Qt.UserRole)))
             lay.addWidget(self.poses)
@@ -305,7 +315,11 @@ def build_window(node: PendantNode):  # pragma: no cover - exercised by the offs
             self.poses.clear()
             from PyQt5.QtWidgets import QListWidgetItem
             for n in node.store.names():
-                it = QListWidgetItem(f"{n}    ({node.store.poses[n].get('saved', '')})")
+                p = node.store.poses[n]
+                gtxt = ""
+                if node.gripper in p.get("names", []):
+                    gtxt = f"   gripper {p['positions'][p['names'].index(node.gripper)]:+.2f}"
+                it = QListWidgetItem(f"{n}{gtxt}    ({p.get('saved', '')})")
                 it.setData(Qt.UserRole, n)
                 self.poses.addItem(it)
             g = node.store.gripper_open

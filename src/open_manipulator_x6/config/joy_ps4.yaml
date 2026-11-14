@@ -10,7 +10,7 @@ teach_pendant:
     coarse_step: 0.02        # rad per tick while held (20 Hz -> 0.4 rad/s target speed)
     fine_step: 0.004
     gripper_step: 0.01
-    close_sign: -1.0         # closing decreases the gripper position (seen in grip_2)
+    close_sign: 1.0         # closing decreases the gripper position (seen in grip_2)
     contact_stop: true
     gripper_current: 100     # match arm_driver gripper_goal_current
     cap_max: 200

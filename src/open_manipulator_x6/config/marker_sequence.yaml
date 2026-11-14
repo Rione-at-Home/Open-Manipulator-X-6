@@ -1,9 +1,22 @@
+name: marker_pick_place
+poses_file: ~/Open-Manipulator-X-6/poses.yaml
+repeats: 1
+profile_velocity: 30
+gripper_current: 80        # set to the cap shown in the pendant during your 5/5 runs
+setup:
 - move: home
+steps:
+- rezero                   # pads zeroed at home, nothing touching
 - move: pre_grasp
 - move: grasp
-- wait: 1.0        # let the gripper finish closing before lifting
+- wait: 1.0                # gripper finishes closing (saved in the pose)
 - move: lift
 - move: pre_drop
 - move: place
-- wait: 1.0        # let it finish opening before leaving
+- wait: 1.0                # gripper finishes opening (saved in the pose)
+teardown:
 - move: home
+squeeze_rad: 0.05
+max_close_travel_rad: 1.7
+move_timeout_s: 15.0
+move_tolerance_rad: 0.03

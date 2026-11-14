@@ -1,0 +1,27 @@
+# Teach pendant settings for the QIXIONG wired PS4 controller.
+# Button indices assume the standard Linux PS4 order (cross 0, circle 1, triangle 2, square 3,
+# L1 4, R1 5, L2 6, R2 7, share 8, options 9). Check them once: the pendant's grey line at the
+# bottom shows "last buttons pressed: [n]"; press each button and fix any index that differs.
+teach_pendant:
+  ros__parameters:
+    poses_file: ~/Open-Manipulator-X-6/poses.yaml
+    joint_order: [joint1, joint2, joint3, joint4, joint5, wrist_rotate, gripper]
+    gripper_name: gripper
+    coarse_step: 0.02        # rad per tick while held (20 Hz -> 0.4 rad/s target speed)
+    fine_step: 0.004
+    gripper_step: 0.01
+    close_sign: -1.0         # closing decreases the gripper position (seen in grip_2)
+    contact_stop: true
+    gripper_current: 100     # match arm_driver gripper_goal_current
+    cap_max: 200
+    profile_velocity: 40     # match arm_driver profile_velocity
+    velocity_max: 100
+    rate_hz: 20.0
+    buttons:
+      reverse: 0             # cross
+      forward: 1             # circle
+      fine: 2                # triangle
+      save: 3                # square
+      prev_joint: 4          # L1
+      next_joint: 5          # R1
+      stop: 9                # options
